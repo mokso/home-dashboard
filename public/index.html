@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="fi">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Hall Dashboard</title>
+    <link rel="stylesheet" href="/style.css" />
+  </head>
+  <body>
+    <div class="photo-stage">
+      <div class="photo-slot" id="slot-a">
+        <img class="photo-bg" id="bg-a" alt="" aria-hidden="true" />
+        <img class="photo-fg" id="fg-a" alt="" />
+      </div>
+      <div class="photo-slot" id="slot-b">
+        <img class="photo-bg" id="bg-b" alt="" aria-hidden="true" />
+        <img class="photo-fg" id="fg-b" alt="" />
+      </div>
+    </div>
+
+    <div class="panel panel-clock">
+      <div class="clock-time" id="clock-time"></div>
+      <div class="clock-date" id="clock-date"></div>
+    </div>
+
+    <div class="panel panel-weather" id="weather"></div>
+
+    <div class="panel panel-calendar" id="calendar"></div>
+
+    <div class="panel panel-sensors" id="sensors"></div>
+
+    <div class="panel panel-electricity" id="electricity"></div>
+
+    <div class="caption" id="caption-a"></div>
+    <div class="caption" id="caption-b"></div>
+
+    <script src="/app.js"></script>
+  </body>
+</html>
