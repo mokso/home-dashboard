@@ -15,9 +15,28 @@ function num(name, defaultValue) {
   return Number.isFinite(n) ? n : defaultValue;
 }
 
+function parseSensors() {
+  const out = [];
+  for (let i = 1; i <= 20; i++) {
+    const entity = process.env[`SENSOR_${i}_ENTITY`];
+    if (!entity) continue;
+    out.push({
+      entity,
+      label: process.env[`SENSOR_${i}_LABEL`] ?? entity,
+      unit: process.env[`SENSOR_${i}_UNIT`] ?? '',
+      decimals: num(`SENSOR_${i}_DECIMALS`, 0),
+      multiplier: num(`SENSOR_${i}_MULTIPLIER`, 1),
+      showAbove: num(`SENSOR_${i}_SHOW_ABOVE`, null),
+    });
+  }
+  return out;
+}
+
 export const config = {
   port: Number(process.env.PORT) || 3000,
   host: process.env.HOST || '0.0.0.0',
+  password: process.env.DASHBOARD_PASSWORD || null,
+  title: process.env.DASHBOARD_TITLE || 'Family Dashboard',
   immich: {
     baseUrl: required('IMMICH_BASE_URL').replace(/\/+$/, ''),
     apiKey: required('IMMICH_API_KEY'),
@@ -41,10 +60,5 @@ export const config = {
     greenBelow: num('ELEC_GREEN_BELOW', 10),
     redAbove: num('ELEC_RED_ABOVE', 20),
   },
-  sensors: [
-    { entity: 'sensor.palju_vesi',      label: 'Palju',         unit: '°C',  showAbove: num('SENSOR_PALJU_SHOW_ABOVE', 25), transform: Math.round },
-    { entity: 'sensor.sauna_lampotila', label: 'Sauna',         unit: '°C',  showAbove: num('SENSOR_SAUNA_SHOW_ABOVE', 40), transform: Math.round },
-    { entity: 'sensor.inverter_pv_power',         label: 'Tuotantoteho',  unit: 'kW',  transform: (v) => Math.round(v / 100) / 10 },
-    { entity: 'sensor.inverter_today_production', label: 'Tuotanto tänään', unit: 'kWh', transform: (v) => Math.round(v * 10) / 10 },
-  ],
+  sensors: parseSensors(),
 };

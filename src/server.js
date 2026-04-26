@@ -5,6 +5,7 @@ import { dirname, join } from 'node:path';
 import { config } from './config.js';
 import { photoRoutes } from './routes/photo.js';
 import { stateRoutes } from './routes/state.js';
+import { sensorRoutes } from './routes/sensors.js';
 import { warmup, setLogger } from './sources/immich.js';
 import { health } from './lib/health.js';
 
@@ -24,8 +25,17 @@ await fastify.register(fastifyStatic, {
   prefix: '/',
 });
 
+if (config.password) {
+  fastify.addHook('onRequest', (req, reply, done) => {
+    if (!req.url.startsWith('/api/')) return done();
+    if (req.headers['x-dashboard-password'] === config.password) return done();
+    reply.code(401).send({ error: 'unauthorized' });
+  });
+}
+
 await fastify.register(photoRoutes);
 await fastify.register(stateRoutes);
+await fastify.register(sensorRoutes);
 
 fastify.get('/api/health', async () => ({
   ok: true,

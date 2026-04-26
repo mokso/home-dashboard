@@ -219,27 +219,125 @@ html, body {
   right: 32px;
   text-align: right;
   min-width: 180px;
+  pointer-events: auto;
+  cursor: pointer;
 }
 
 .panel-sensors:empty {
   display: none;
 }
 
-.sensor-row {
-  display: flex;
-  justify-content: space-between;
+/* Compact mode (default): one row per sensor, label + value */
+
+.panel-sensors:not(.expanded) .sensor-row {
+  display: grid;
+  grid-template-columns: auto auto;
+  justify-content: end;
+  align-items: center;
   gap: 24px;
   font-size: 22px;
   margin-top: 6px;
   font-variant-numeric: tabular-nums;
 }
 
-.sensor-row:first-child {
+.panel-sensors:not(.expanded) .sensor-row:first-child {
   margin-top: 0;
+}
+
+.panel-sensors:not(.expanded) .sensor-header {
+  display: contents;
+}
+
+.panel-sensors:not(.expanded) .sensor-chart,
+.panel-sensors:not(.expanded) .sensor-axis-x {
+  display: none;
 }
 
 .sensor-label {
   font-weight: 500;
+}
+
+/* Expanded mode: full-width 2×2 grid with bigger charts and axes */
+
+.panel-sensors.expanded {
+  top: 280px;
+  bottom: 270px;
+  left: 32px;
+  right: 32px;
+  min-width: 0;
+  max-width: none;
+  text-align: left;
+  padding: 22px 26px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: 1fr 1fr;
+  gap: 22px 32px;
+  font-variant-numeric: tabular-nums;
+}
+
+.panel-sensors.expanded .sensor-row {
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  gap: 4px;
+  min-height: 0;
+}
+
+.panel-sensors.expanded .sensor-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  font-size: 20px;
+}
+
+.panel-sensors.expanded .sensor-chart {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 8px;
+  align-items: stretch;
+  min-height: 0;
+}
+
+.panel-sensors.expanded .sensor-axis-y {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  font-size: 11px;
+  opacity: 0.6;
+  text-align: right;
+}
+
+.panel-sensors.expanded .sensor-spark {
+  display: block;
+  width: 100%;
+  height: 100%;
+  color: rgba(255, 255, 255, 0.75);
+}
+
+.panel-sensors.expanded .sensor-axis-x {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+  opacity: 0.6;
+  margin-left: 28px;
+}
+
+/* While the sensor panel is expanded, force the electricity panel into a
+   compact look so the two don't overlap, regardless of the user's saved
+   electricity preference. */
+body.sensors-expanded .panel-electricity {
+  right: auto;
+  left: 32px;
+  bottom: 160px;
+  width: 220px;
+  padding: 18px 26px;
+}
+body.sensors-expanded .panel-electricity .elec-bars,
+body.sensors-expanded .panel-electricity .elec-prices,
+body.sensors-expanded .panel-electricity .elec-hours {
+  display: none;
+}
+body.sensors-expanded .panel-electricity .elec-header {
+  margin-bottom: 0;
 }
 
 .panel-electricity {
@@ -272,7 +370,7 @@ html, body {
   margin-bottom: 0;
 }
 
-body.electricity-compact .panel-sensors {
+body.electricity-compact .panel-sensors:not(.expanded) {
   bottom: 160px;
 }
 
@@ -296,6 +394,10 @@ body.electricity-compact .panel-sensors {
   font-size: 22px;
   font-variant-numeric: tabular-nums;
 }
+
+.elec-now.cheap { color: #4caf50; }
+.elec-now.mid   { color: #ffc107; }
+.elec-now.high  { color: #ef5350; }
 
 .elec-bars {
   display: flex;
@@ -374,14 +476,14 @@ body.electricity-compact .panel-sensors {
   left: 0;
   right: 0;
   bottom: 0;
-  min-height: 120px;
-  padding: 0 40px 26px;
+  min-height: 80px;
+  padding: 0 40px 16px;
   display: flex;
   align-items: flex-end;
   justify-content: center;
   background: linear-gradient(to top, rgba(0, 0, 0, 0.75) 0%, rgba(0, 0, 0, 0) 100%);
   color: #fff;
-  font-size: 22px;
+  font-size: 16px;
   letter-spacing: 0.02em;
   opacity: 0;
   transition: opacity 1.5s ease-in-out;
@@ -395,4 +497,131 @@ body.electricity-compact .panel-sensors {
 
 .caption:empty {
   display: none;
+}
+
+.refresh-btn {
+  position: fixed;
+  bottom: 32px;
+  left: 32px;
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(0, 0, 0, 0.4);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  color: #fff;
+  cursor: pointer;
+  pointer-events: auto;
+  opacity: 0.6;
+  transition: opacity 0.2s, background-color 0.2s;
+  font-family: inherit;
+  padding: 0;
+}
+
+.refresh-btn:hover {
+  opacity: 1;
+  background: rgba(0, 0, 0, 0.6);
+}
+
+.refresh-ring {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  fill: none;
+  transform: rotate(-90deg);
+}
+
+.refresh-ring-track {
+  stroke: rgba(255, 255, 255, 0.12);
+  stroke-width: 2.5;
+}
+
+.refresh-ring-progress {
+  stroke: rgba(255, 255, 255, 0.7);
+  stroke-width: 2.5;
+  stroke-linecap: round;
+  transition: stroke-dashoffset 1s linear;
+}
+
+.refresh-icon {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 28px;
+  line-height: 1;
+}
+
+.refresh-btn.spinning .refresh-icon {
+  animation: refresh-spin 0.7s ease-in-out;
+}
+
+@keyframes refresh-spin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+
+.pw-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.85);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.pw-overlay[hidden] {
+  display: none;
+}
+
+.pw-box {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  background: rgba(30, 30, 30, 0.95);
+  border-radius: 18px;
+  padding: 36px 44px;
+  min-width: 280px;
+}
+
+.pw-label {
+  font-size: 16px;
+  opacity: 0.75;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.pw-input {
+  font-size: 28px;
+  font-family: inherit;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 10px;
+  color: #fff;
+  padding: 10px 16px;
+  outline: none;
+}
+
+.pw-input:focus {
+  border-color: rgba(255, 255, 255, 0.5);
+}
+
+.pw-btn {
+  align-self: flex-end;
+  font-family: inherit;
+  font-size: 18px;
+  padding: 10px 32px;
+  background: rgba(255, 255, 255, 0.15);
+  border: none;
+  border-radius: 10px;
+  color: #fff;
+  cursor: pointer;
+}
+
+.pw-btn:hover {
+  background: rgba(255, 255, 255, 0.25);
 }

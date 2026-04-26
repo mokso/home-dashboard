@@ -3,6 +3,48 @@ const PHOTO_INTERVAL_MS = 5 * 60 * 1000;
 const STATE_POLL_MS = 60 * 1000;
 const RETRY_MS = 5000;
 
+// Password ------------------------------------------------------------
+
+const pwOverlay = document.getElementById('pw-overlay');
+const pwForm = document.getElementById('pw-form');
+const pwInput = document.getElementById('pw-input');
+const PW_KEY = 'dashboard.password';
+
+function getPassword() {
+  return localStorage.getItem(PW_KEY) || '';
+}
+
+function apiFetch(url, opts = {}) {
+  const pw = getPassword();
+  const headers = { ...(opts.headers || {}) };
+  if (pw) headers['X-Dashboard-Password'] = pw;
+  return fetch(url, { ...opts, headers });
+}
+
+function showPasswordPrompt() {
+  pwInput.value = '';
+  pwOverlay.hidden = false;
+  pwInput.focus();
+}
+
+function hidePasswordPrompt() {
+  pwOverlay.hidden = true;
+}
+
+pwForm.addEventListener('submit', (e) => {
+  e.preventDefault();
+  const val = pwInput.value.trim();
+  if (!val) return;
+  localStorage.setItem(PW_KEY, val);
+  hidePasswordPrompt();
+  pollState();
+  triggerPhoto();
+});
+
+// Show prompt if no password stored yet. API calls are deferred until submitted.
+const _needsPassword = !getPassword();
+if (_needsPassword) showPasswordPrompt();
+
 const slotA = { slot: document.getElementById('slot-a'), bg: document.getElementById('bg-a'), fg: document.getElementById('fg-a'), caption: document.getElementById('caption-a') };
 const slotB = { slot: document.getElementById('slot-b'), bg: document.getElementById('bg-b'), fg: document.getElementById('fg-b'), caption: document.getElementById('caption-b') };
 
@@ -186,19 +228,112 @@ function renderCalendar(events) {
 // Sensors ------------------------------------------------------------
 
 const sensorsEl = document.getElementById('sensors');
+const SENSORS_EXPANDED_KEY = 'dashboard.sensors.expanded';
+
+let lastSensorList = null;
+let sensorHistoryCache = null;
+
+const HISTORY_HOURS = 12;
+
+function fmtAxis(n) {
+  const r = Math.round(n * 10) / 10;
+  return Number.isInteger(r) ? String(r) : r.toFixed(1);
+}
+
+function renderSparkline(points) {
+  if (!points || points.length < 2) {
+    return '<svg class="sensor-spark" viewBox="0 0 100 28"></svg>';
+  }
+  const vs = points.map((p) => p.value);
+  const vMin = Math.min(...vs);
+  const vMax = Math.max(...vs);
+  const range = vMax - vMin || 1;
+  const W = 200;
+  const H = 60;
+  const pad = 3;
+  const usable = H - pad * 2;
+  const d = points.map((p, i) => {
+    const x = (i / (points.length - 1)) * W;
+    const y = pad + usable - ((p.value - vMin) / range) * usable;
+    return `${i === 0 ? 'M' : 'L'}${x.toFixed(1)},${y.toFixed(1)}`;
+  }).join(' ');
+  const gridYs = [0, 0.25, 0.5, 0.75, 1].map((f) => (pad + usable - f * usable).toFixed(1));
+  const gridLines = gridYs.map((y) =>
+    `<line x1="0" y1="${y}" x2="${W}" y2="${y}" stroke="rgba(255,255,255,0.1)" stroke-width="0.5"/>`
+  ).join('');
+  const gridXs = Array.from({ length: HISTORY_HOURS - 1 }, (_, i) => ((i + 1) * W / HISTORY_HOURS).toFixed(1));
+  const gridCols = gridXs.map((x) =>
+    `<line x1="${x}" y1="0" x2="${x}" y2="${H}" stroke="rgba(255,255,255,0.08)" stroke-width="0.5"/>`
+  ).join('');
+  return `<svg class="sensor-spark" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">
+    ${gridLines}
+    ${gridCols}
+    <path d="${d}" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round"/>
+  </svg>`;
+}
 
 function renderSensors(list) {
+  lastSensorList = list;
   if (!list || !list.length) {
     sensorsEl.innerHTML = '';
     return;
   }
-  sensorsEl.innerHTML = list.map((s) => `
-    <div class="sensor-row">
-      <span class="sensor-label">${escapeHtml(s.label)}</span>
-      <span class="sensor-value">${escapeHtml(String(s.value))} ${escapeHtml(s.unit || '')}</span>
-    </div>
-  `).join('');
+  sensorsEl.innerHTML = list.map((s) => {
+    const hist = sensorHistoryCache?.find((h) => h.entity === s.entity);
+    const points = hist?.points;
+    let axisY = '';
+    let axisX = '';
+    if (points && points.length >= 2) {
+      const vs = points.map((p) => p.value);
+      const vMax = Math.max(...vs);
+      const vMin = Math.min(...vs);
+      axisY = `<div class="sensor-axis-y"><span>${escapeHtml(fmtAxis(vMax))}</span><span>${escapeHtml(fmtAxis(vMin))}</span></div>`;
+      const tStart = points[0].t;
+      const tMid = points[Math.floor((points.length - 1) / 2)].t;
+      const fmtHr = (iso) => hourFmt.format(new Date(iso));
+      axisX = `<div class="sensor-axis-x"><span>${escapeHtml(fmtHr(tStart))}</span><span>${escapeHtml(fmtHr(tMid))}</span><span>nyt</span></div>`;
+    }
+    return `
+      <div class="sensor-row">
+        <div class="sensor-header">
+          <span class="sensor-label">${escapeHtml(s.label)}</span>
+          <span class="sensor-value">${escapeHtml(String(s.value))} ${escapeHtml(s.unit || '')}</span>
+        </div>
+        <div class="sensor-chart">
+          ${axisY}
+          ${renderSparkline(points)}
+        </div>
+        ${axisX}
+      </div>
+    `;
+  }).join('');
 }
+
+async function loadSensorHistory() {
+  try {
+    const res = await apiFetch('/api/sensors/history?hours=12', { cache: 'no-store' });
+    if (res.status === 401) { localStorage.removeItem(PW_KEY); showPasswordPrompt(); return; }
+    if (!res.ok) throw new Error(`status ${res.status}`);
+    sensorHistoryCache = await res.json();
+    if (lastSensorList) renderSensors(lastSensorList);
+  } catch (err) {
+    // silent — last-good values stay on screen
+  }
+}
+
+function applySensorsExpanded(expanded) {
+  sensorsEl.classList.toggle('expanded', expanded);
+  document.body.classList.toggle('sensors-expanded', expanded);
+  if (expanded && !sensorHistoryCache) loadSensorHistory();
+  if (lastSensorList) renderSensors(lastSensorList);
+}
+applySensorsExpanded(localStorage.getItem(SENSORS_EXPANDED_KEY) === '1');
+
+sensorsEl.addEventListener('click', () => {
+  const next = !sensorsEl.classList.contains('expanded');
+  applySensorsExpanded(next);
+  localStorage.setItem(SENSORS_EXPANDED_KEY, next ? '1' : '0');
+});
 
 // Electricity --------------------------------------------------------
 
@@ -260,10 +395,11 @@ function renderElectricity(e) {
     );
   }
 
+  const nowTier = e.hours[0]?.tier || 'mid';
   electricityEl.innerHTML = `
     <div class="elec-header">
       <span class="elec-label">Sähkö</span>
-      <span class="elec-now">${escapeHtml(fmtPrice(e.now))}</span>
+      <span class="elec-now ${nowTier}">${escapeHtml(fmtPrice(e.now))}</span>
     </div>
     <div class="elec-bars">${bars.join('')}</div>
     <div class="elec-prices">${labels.join('')}</div>
@@ -275,9 +411,11 @@ function renderElectricity(e) {
 
 async function pollState() {
   try {
-    const r = await fetch('/api/state', { cache: 'no-store' });
+    const r = await apiFetch('/api/state', { cache: 'no-store' });
+    if (r.status === 401) { localStorage.removeItem(PW_KEY); showPasswordPrompt(); return; }
     if (!r.ok) throw new Error(`status ${r.status}`);
     const data = await r.json();
+    if (data.title) document.title = data.title;
     if (data.weather) renderWeather(data.weather);
     if (data.calendar) renderCalendar(data.calendar);
     if (data.sensors !== undefined) renderSensors(data.sensors);
@@ -286,7 +424,7 @@ async function pollState() {
     // last-good values stay on screen
   }
 }
-pollState();
+if (!_needsPassword) pollState();
 setInterval(pollState, STATE_POLL_MS);
 
 // Photos -------------------------------------------------------------
@@ -318,7 +456,8 @@ function renderCaption(meta) {
 async function loadNext() {
   let meta;
   try {
-    const res = await fetch('/api/photo/next', { cache: 'no-store' });
+    const res = await apiFetch('/api/photo/next', { cache: 'no-store' });
+    if (res.status === 401) { localStorage.removeItem(PW_KEY); showPasswordPrompt(); return; }
     if (!res.ok) throw new Error(`status ${res.status}`);
     meta = await res.json();
   } catch (err) {
@@ -329,22 +468,77 @@ async function loadNext() {
   const fg = next.fg;
   const bg = next.bg;
   const cap = next.caption;
-  fg.onload = () => {
-    cap.textContent = renderCaption(meta);
-    next.slot.classList.add('active');
-    cap.classList.add('active');
-    active.slot.classList.remove('active');
-    active.caption.classList.remove('active');
-    [active, next] = [next, active];
-  };
-  fg.onerror = () => setTimeout(loadNext, RETRY_MS);
+
+  function applyImage(src) {
+    fg.onload = () => {
+      cap.textContent = renderCaption(meta);
+      next.slot.classList.add('active');
+      cap.classList.add('active');
+      active.slot.classList.remove('active');
+      active.caption.classList.remove('active');
+      [active, next] = [next, active];
+    };
+    fg.onerror = () => setTimeout(loadNext, RETRY_MS);
+    fg.src = src;
+    bg.src = src;
+  }
+
   const url = `/api/photo/asset/${encodeURIComponent(meta.id)}`;
-  fg.src = url;
-  bg.src = url;
+  const pw = getPassword();
+  if (pw) {
+    apiFetch(url, { cache: 'no-store' }).then((r) => {
+      if (r.status === 401) { localStorage.removeItem(PW_KEY); showPasswordPrompt(); return null; }
+      if (!r.ok) { setTimeout(loadNext, RETRY_MS); return null; }
+      return r.blob();
+    }).then((blob) => {
+      if (blob) applyImage(URL.createObjectURL(blob));
+    }).catch(() => setTimeout(loadNext, RETRY_MS));
+  } else {
+    applyImage(url);
+  }
 }
 
-loadNext();
-setInterval(loadNext, PHOTO_INTERVAL_MS);
+// Photo cycle is driven by a self-rescheduling timeout (not setInterval) so
+// manual refresh resets the next-fire moment cleanly.
+let lastPhotoAt = Date.now();
+let photoTimer = null;
+
+function schedulePhoto() {
+  clearTimeout(photoTimer);
+  photoTimer = setTimeout(triggerPhoto, PHOTO_INTERVAL_MS);
+}
+
+function triggerPhoto() {
+  lastPhotoAt = Date.now();
+  loadNext();
+  schedulePhoto();
+}
+
+if (!_needsPassword) triggerPhoto();
+
+// Manual refresh button + countdown ring ---------------------------
+
+const refreshBtn = document.getElementById('refresh');
+const refreshRing = document.querySelector('.refresh-ring-progress');
+const RING_RADIUS = 26;
+const RING_CIRCUMFERENCE = 2 * Math.PI * RING_RADIUS;
+refreshRing.style.strokeDasharray = String(RING_CIRCUMFERENCE);
+
+function updateRefreshRing() {
+  const elapsed = Date.now() - lastPhotoAt;
+  const progress = Math.min(1, elapsed / PHOTO_INTERVAL_MS);
+  refreshRing.style.strokeDashoffset = (progress * RING_CIRCUMFERENCE).toFixed(2);
+}
+updateRefreshRing();
+setInterval(updateRefreshRing, 1000);
+
+refreshBtn.addEventListener('click', () => {
+  refreshBtn.classList.remove('spinning');
+  void refreshBtn.offsetWidth; // restart spin animation on rapid taps
+  refreshBtn.classList.add('spinning');
+  pollState();
+  triggerPhoto();
+});
 
 // Daily reload at 04:00 — guards against multi-week JS-state drift.
 (function scheduleDailyReload() {

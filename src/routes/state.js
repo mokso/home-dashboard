@@ -3,6 +3,7 @@ import { getCalendar } from '../sources/calendar.js';
 import { getSensors } from '../sources/sensors.js';
 import { getElectricity } from '../sources/electricity.js';
 import { recordSuccess, recordError } from '../lib/health.js';
+import { config } from '../config.js';
 
 const sources = [
   ['weather', getWeather],
@@ -15,7 +16,7 @@ export async function stateRoutes(fastify) {
   fastify.get('/api/state', async (req, reply) => {
     const results = await Promise.allSettled(sources.map(([, fn]) => fn()));
 
-    const out = { ts: new Date().toISOString(), errors: {} };
+    const out = { ts: new Date().toISOString(), title: config.title, errors: {} };
     sources.forEach(([key], i) => {
       const r = results[i];
       if (r.status === 'fulfilled') {

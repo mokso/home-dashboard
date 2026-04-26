@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width,initial-scale=1" />
-    <title>Hall Dashboard</title>
+    <title>Family Dashboard</title>
     <link rel="stylesheet" href="/style.css" />
   </head>
   <body>
@@ -33,6 +33,22 @@
 
     <div class="caption" id="caption-a"></div>
     <div class="caption" id="caption-b"></div>
+
+    <button class="refresh-btn" id="refresh" title="Päivitä">
+      <svg class="refresh-ring" viewBox="0 0 56 56" aria-hidden="true">
+        <circle class="refresh-ring-track" cx="28" cy="28" r="26"></circle>
+        <circle class="refresh-ring-progress" cx="28" cy="28" r="26"></circle>
+      </svg>
+      <span class="refresh-icon">↻</span>
+    </button>
+
+    <div class="pw-overlay" id="pw-overlay" hidden>
+      <form class="pw-box" id="pw-form">
+        <label class="pw-label" for="pw-input">Salasana</label>
+        <input class="pw-input" id="pw-input" type="password" autocomplete="current-password" />
+        <button class="pw-btn" type="submit">OK</button>
+      </form>
+    </div>
 
     <script src="/app.js"></script>
   </body>
