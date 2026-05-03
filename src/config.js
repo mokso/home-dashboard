@@ -63,4 +63,5 @@ export const config = {
     redAbove: num('ELEC_RED_ABOVE', 20),
   },
   sensors: parseSensors(),
+  cameras: csv('CAMERA_ENTITIES'),
 };

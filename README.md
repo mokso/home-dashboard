@@ -12,6 +12,7 @@ Built as a DAKboard replacement running on a 1st-gen Surface Pro.
 - **Calendar** — upcoming events from Home Assistant calendar entities
 - **Sensors** — Home Assistant sensor values; click to expand into 12-hour history charts
 - **Electricity prices** — Finnish spot prices (spot-hinta.fi) with color-coded bar chart; click to toggle compact/expanded
+- **Cameras** — button opens a 2×2 live view of Frigate (or any HA) cameras; tap a tile to go fullscreen, tap again to return to the grid
 
 ## Stack
 
@@ -66,6 +67,7 @@ Copy `.env.example` to `.env` and set the values below.
 | `CALENDAR_DAYS_AHEAD` | no | Days of events to show (default 5) |
 | `ELEC_GREEN_BELOW` | no | Price threshold for green (default 10 c/kWh) |
 | `ELEC_RED_ABOVE` | no | Price threshold for red (default 20 c/kWh) |
+| `CAMERA_ENTITIES` | no | Comma-separated HA camera entity IDs; camera button hidden if unset |
 
 ### Sensors
 

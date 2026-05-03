@@ -620,6 +620,115 @@ body.electricity-compact .panel-sensors:not(.expanded) {
   to   { transform: rotate(360deg); }
 }
 
+.cam-btn {
+  position: fixed;
+  bottom: 32px;
+  left: 100px;
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(0, 0, 0, 0.4);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  color: #fff;
+  cursor: pointer;
+  pointer-events: auto;
+  opacity: 0.6;
+  transition: opacity 0.2s, background-color 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.cam-btn:hover {
+  opacity: 1;
+  background: rgba(0, 0, 0, 0.6);
+}
+
+.cam-btn[hidden] {
+  display: none;
+}
+
+.cam-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.92);
+  z-index: 100;
+}
+
+.cam-overlay[hidden] {
+  display: none;
+}
+
+.cam-close {
+  position: absolute;
+  top: 20px;
+  right: 28px;
+  background: none;
+  border: none;
+  color: rgba(255, 255, 255, 0.55);
+  font-size: 36px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 10px 14px;
+  transition: color 0.15s;
+}
+
+.cam-close:hover {
+  color: #fff;
+}
+
+.cam-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  grid-auto-rows: 1fr;
+  gap: 12px;
+  position: absolute;
+  inset: 76px 32px 32px;
+}
+
+.cam-tile {
+  position: relative;
+  background: #111;
+  border-radius: 12px;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.cam-grid.single .cam-tile {
+  display: none;
+}
+
+.cam-grid.single .cam-tile.active {
+  display: flex;
+  grid-column: 1 / -1;
+  grid-row: 1 / -1;
+}
+
+.cam-tile img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.cam-tile-label {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  padding: 20px 14px 10px;
+  background: linear-gradient(to top, rgba(0, 0, 0, 0.65) 0%, transparent 100%);
+  font-size: 15px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  color: #fff;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+}
+
 .pw-overlay {
   position: fixed;
   inset: 0;

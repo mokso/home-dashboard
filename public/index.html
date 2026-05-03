@@ -34,6 +34,18 @@
     <div class="caption" id="caption-a"></div>
     <div class="caption" id="caption-b"></div>
 
+    <button class="cam-btn" id="cam-btn" title="Kamerat" hidden>
+      <svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
+        <circle cx="12" cy="13" r="4"/>
+      </svg>
+    </button>
+
+    <div class="cam-overlay" id="cam-overlay" hidden>
+      <button class="cam-close" id="cam-close" aria-label="Sulje">✕</button>
+      <div class="cam-grid" id="cam-grid"></div>
+    </div>
+
     <button class="refresh-btn" id="refresh" title="Päivitä">
       <svg class="refresh-ring" viewBox="0 0 56 56" aria-hidden="true">
         <circle class="refresh-ring-track" cx="28" cy="28" r="26"></circle>

@@ -39,6 +39,7 @@ pwForm.addEventListener('submit', (e) => {
   hidePasswordPrompt();
   pollState();
   triggerPhoto();
+  loadCameraList();
 });
 
 // Show prompt if no password stored yet. API calls are deferred until submitted.
@@ -556,6 +557,7 @@ function triggerPhoto() {
 }
 
 if (!_needsPassword) triggerPhoto();
+if (!_needsPassword) loadCameraList();
 
 // Manual refresh button + countdown ring ---------------------------
 
@@ -579,6 +581,91 @@ refreshBtn.addEventListener('click', () => {
   refreshBtn.classList.add('spinning');
   pollState();
   triggerPhoto();
+});
+
+// Cameras ------------------------------------------------------------
+
+const camBtn = document.getElementById('cam-btn');
+const camOverlay = document.getElementById('cam-overlay');
+const camClose = document.getElementById('cam-close');
+const camGrid = document.getElementById('cam-grid');
+
+let camImgs = [];
+let camPollTimer = null;
+let focusedCamIndex = null;
+
+function toggleCameraFocus(index) {
+  focusedCamIndex = focusedCamIndex === index ? null : index;
+  camGrid.classList.toggle('single', focusedCamIndex !== null);
+  for (const { tile, index: i } of camImgs) {
+    tile.classList.toggle('active', i === focusedCamIndex);
+  }
+}
+
+async function loadCameraList() {
+  try {
+    const res = await apiFetch('/api/cameras');
+    if (res.status === 401) { localStorage.removeItem(PW_KEY); showPasswordPrompt(); return; }
+    if (!res.ok) return;
+    const list = await res.json();
+    if (!list.length) return;
+
+    camImgs = [];
+    camGrid.innerHTML = '';
+    for (const cam of list) {
+      const tile = document.createElement('div');
+      tile.className = 'cam-tile';
+      const img = document.createElement('img');
+      img.alt = cam.label;
+      const label = document.createElement('div');
+      label.className = 'cam-tile-label';
+      label.textContent = cam.label;
+      tile.appendChild(img);
+      tile.appendChild(label);
+      tile.addEventListener('click', () => toggleCameraFocus(cam.index));
+      camGrid.appendChild(tile);
+      camImgs.push({ img, tile, index: cam.index });
+    }
+    camBtn.hidden = false;
+  } catch (err) {
+    // silent — no cameras configured
+  }
+}
+
+function refreshCameraSnapshots() {
+  const t = Date.now();
+  const pw = getPassword();
+  for (const { img, index } of camImgs) {
+    if (pw) {
+      apiFetch(`/api/cameras/${index}/snapshot?t=${t}`, { cache: 'no-store' })
+        .then((r) => r.ok ? r.blob() : null)
+        .then((blob) => { if (blob) img.src = URL.createObjectURL(blob); })
+        .catch(() => {});
+    } else {
+      img.src = `/api/cameras/${index}/snapshot?t=${t}`;
+    }
+  }
+}
+
+function openCameras() {
+  camOverlay.hidden = false;
+  refreshCameraSnapshots();
+  camPollTimer = setInterval(refreshCameraSnapshots, 1500);
+}
+
+function closeCameras() {
+  camOverlay.hidden = true;
+  clearInterval(camPollTimer);
+  camPollTimer = null;
+  focusedCamIndex = null;
+  camGrid.classList.remove('single');
+  for (const { tile } of camImgs) tile.classList.remove('active');
+}
+
+camBtn.addEventListener('click', openCameras);
+camClose.addEventListener('click', closeCameras);
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && !camOverlay.hidden) closeCameras();
 });
 
 // Daily reload at 04:00 — guards against multi-week JS-state drift.

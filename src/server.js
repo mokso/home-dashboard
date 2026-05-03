@@ -6,6 +6,7 @@ import { config } from './config.js';
 import { photoRoutes } from './routes/photo.js';
 import { stateRoutes } from './routes/state.js';
 import { sensorRoutes } from './routes/sensors.js';
+import { cameraRoutes } from './routes/cameras.js';
 import { warmup, setLogger } from './sources/immich.js';
 import { health } from './lib/health.js';
 
@@ -36,6 +37,7 @@ if (config.password) {
 await fastify.register(photoRoutes);
 await fastify.register(stateRoutes);
 await fastify.register(sensorRoutes);
+await fastify.register(cameraRoutes);
 
 fastify.get('/api/health', async () => ({
   ok: true,
