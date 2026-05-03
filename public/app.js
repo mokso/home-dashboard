@@ -235,6 +235,20 @@ let sensorHistoryCache = null;
 
 const HISTORY_HOURS = 12;
 
+const STATE_COLORS = {
+  Charging: '#4caf50',
+  Complete: '#42a5f5',
+  WaitCar: '#ffc107',
+  Idle:     '#444',
+  Error:    '#ef5350',
+};
+
+function fmtDuration(ms) {
+  const h = Math.floor(ms / 3600000);
+  const m = Math.floor((ms % 3600000) / 60000);
+  return h > 0 ? `${h}h ${m}m` : `${m}m`;
+}
+
 function fmtAxis(n) {
   const r = Math.round(n * 10) / 10;
   return Number.isInteger(r) ? String(r) : r.toFixed(1);
@@ -279,6 +293,33 @@ function renderSensors(list) {
     return;
   }
   sensorsEl.innerHTML = list.map((s) => {
+    if (s.text) {
+      const hist = sensorHistoryCache?.find((h) => h.entity === s.entity);
+      const segments = hist?.segments;
+      let timeline = '';
+      let axisX = '';
+      if (segments && segments.length) {
+        const segs = segments.map((seg) => {
+          const dur = new Date(seg.to).getTime() - new Date(seg.from).getTime();
+          const color = STATE_COLORS[seg.state] ?? '#444';
+          const label = dur > 0 ? `<span class="timeline-seg-label">${escapeHtml(seg.state)}</span>` : '';
+          return `<div class="timeline-seg" style="flex-grow:${dur};background:${color}" title="${escapeHtml(seg.state)} ${escapeHtml(fmtDuration(dur))}">${label}</div>`;
+        }).join('');
+        timeline = `<div class="sensor-timeline">${segs}</div>`;
+        const fmtHr = (iso) => hourFmt.format(new Date(iso));
+        axisX = `<div class="sensor-axis-x"><span>${escapeHtml(fmtHr(segments[0].from))}</span><span>nyt</span></div>`;
+      }
+      return `
+        <div class="sensor-row sensor-row-text">
+          <div class="sensor-header">
+            <span class="sensor-label">${escapeHtml(s.label)}</span>
+            <span class="sensor-value">${escapeHtml(String(s.value))}</span>
+          </div>
+          ${timeline}
+          ${axisX}
+        </div>
+      `;
+    }
     const hist = sensorHistoryCache?.find((h) => h.entity === s.entity);
     const points = hist?.points;
     let axisY = '';

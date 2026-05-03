@@ -1,7 +1,7 @@
 import { config } from '../config.js';
 import { ttlCache } from '../lib/cache.js';
 
-const { latitude, longitude, timezone } = config.weather;
+const { latitude, longitude, timezone, hourlyCount } = config.weather;
 const TTL_MS = 15 * 60 * 1000;
 
 const url =
@@ -34,7 +34,7 @@ async function fetchWeather() {
   const hourlyTimes = d.hourly?.time ?? [];
   const startIdx = hourlyTimes.findIndex((t) => t > cutoff);
   const hourly = startIdx >= 0
-    ? hourlyTimes.slice(startIdx, startIdx + 5).map((time, k) => ({
+    ? hourlyTimes.slice(startIdx, startIdx + hourlyCount).map((time, k) => ({
         time,
         temp: d.hourly?.temperature_2m?.[startIdx + k] ?? null,
         code: d.hourly?.weather_code?.[startIdx + k] ?? null,

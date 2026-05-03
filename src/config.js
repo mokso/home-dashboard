@@ -27,6 +27,7 @@ function parseSensors() {
       decimals: num(`SENSOR_${i}_DECIMALS`, 0),
       multiplier: num(`SENSOR_${i}_MULTIPLIER`, 1),
       showAbove: num(`SENSOR_${i}_SHOW_ABOVE`, null),
+      text: process.env[`SENSOR_${i}_TEXT`] === 'true',
     });
   }
   return out;
@@ -47,6 +48,7 @@ export const config = {
     latitude: Number(required('WEATHER_LATITUDE')),
     longitude: Number(required('WEATHER_LONGITUDE')),
     timezone: process.env.WEATHER_TIMEZONE || 'UTC',
+    hourlyCount: num('WEATHER_HOURLY_COUNT', 5),
   },
   homeAssistant: {
     baseUrl: required('HA_BASE_URL').replace(/\/+$/, ''),

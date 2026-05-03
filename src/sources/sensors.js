@@ -29,6 +29,18 @@ async function fetchSensors() {
       errors.push(`${cfg.entity}: ${r.reason?.message ?? r.reason}`);
       return;
     }
+    if (cfg.text) {
+      const state = r.value?.state;
+      if (!state || state === 'unavailable' || state === 'unknown' || state === 'none') return;
+      out.push({
+        entity: cfg.entity,
+        label: cfg.label ?? r.value?.attributes?.friendly_name ?? cfg.entity,
+        unit: '',
+        value: state,
+        text: true,
+      });
+      return;
+    }
     const raw = parseFloat(r.value?.state);
     if (!Number.isFinite(raw)) return; // unavailable / unknown
     if (cfg.showAbove != null && raw <= cfg.showAbove) return;
@@ -72,6 +84,18 @@ async function fetchHistoryRaw(hours) {
   return res.json();
 }
 
+function eventsToSegments(events, now) {
+  const segments = [];
+  for (let i = 0; i < events.length; i++) {
+    const state = events[i].state;
+    if (!state || state === 'unavailable' || state === 'unknown' || state === 'none') continue;
+    const from = events[i].last_changed;
+    const to = i + 1 < events.length ? events[i + 1].last_changed : now.toISOString();
+    segments.push({ state, from, to });
+  }
+  return segments;
+}
+
 function downsample(rawPoints, buckets) {
   // rawPoints: [{ t: ISO, value: Number }, ...] sorted ascending.
   if (rawPoints.length === 0) return [];
@@ -96,6 +120,7 @@ function downsample(rawPoints, buckets) {
 }
 
 async function fetchHistory(hours) {
+  const now = new Date();
   const data = await fetchHistoryRaw(hours);
   const byEntity = new Map();
   for (const events of data) {
@@ -105,6 +130,14 @@ async function fetchHistory(hours) {
   }
   return sensors.map((cfg) => {
     const events = byEntity.get(cfg.entity) ?? [];
+    if (cfg.text) {
+      return {
+        entity: cfg.entity,
+        label: cfg.label,
+        text: true,
+        segments: eventsToSegments(events, now),
+      };
+    }
     const raw = [];
     for (const e of events) {
       const v = parseFloat(e.state);
