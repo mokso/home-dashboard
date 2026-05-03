@@ -165,7 +165,7 @@ html, body {
   top: 220px;
   left: 32px;
   max-width: 420px;
-  max-height: calc(100vh - 580px); /* stops above electricity panel (bottom:150 + ~190px height + 220px top + 20px gap) */
+  max-height: calc(100vh - 510px); /* stops above electricity panel (bottom:80 + ~190px height + 220px top + 20px gap) */
   overflow-y: auto;
   font-size: 18px;
   scrollbar-width: thin;
@@ -220,7 +220,7 @@ html, body {
 }
 
 .panel-sensors {
-  bottom: 360px;
+  bottom: 290px;
   right: 32px;
   text-align: right;
   min-width: 180px;
@@ -383,7 +383,7 @@ html, body {
 body.sensors-expanded .panel-electricity {
   right: auto;
   left: 32px;
-  bottom: 160px;
+  bottom: 90px;
   width: 220px;
   padding: 18px 26px;
 }
@@ -399,7 +399,7 @@ body.sensors-expanded .panel-electricity .elec-header {
 .panel-electricity {
   left: 32px;
   right: 32px;
-  bottom: 150px;
+  bottom: 80px;
   padding: 14px 22px;
   pointer-events: auto;
   cursor: pointer;
@@ -411,7 +411,7 @@ body.sensors-expanded .panel-electricity .elec-header {
 
 .panel-electricity.compact {
   right: auto;
-  bottom: 160px;
+  bottom: 90px;
   min-width: 220px;
   padding: 18px 26px;
 }
@@ -427,7 +427,7 @@ body.sensors-expanded .panel-electricity .elec-header {
 }
 
 body.electricity-compact .panel-sensors:not(.expanded) {
-  bottom: 160px;
+  bottom: 90px;
 }
 
 .elec-header {
