@@ -194,22 +194,53 @@ function localDayKey(d) {
   return `${y}-${m}-${dd}`;
 }
 
-function renderCalendar(events) {
+// Local-midnight dates an all-day event covers, clipped to [today, lastDay].
+// The end date from HA is exclusive: an event ending "2026-10-01" lasts
+// through 30.9.
+function allDayEventDays(e, start, today, lastDay) {
+  const end = parseEventStart(e.end, true);
+  const days = [];
+  const d = new Date(Math.max(start, today));
+  while (d <= lastDay && (end ? d < end : days.length === 0)) {
+    days.push(new Date(d));
+    d.setDate(d.getDate() + 1);
+  }
+  return days;
+}
+
+function renderCalendar(events, daysAhead = 5) {
   if (!events || !events.length) {
     calendarEl.innerHTML = '<div class="cal-empty">Ei tulevia tapahtumia</div>';
     return;
   }
 
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const lastDay = new Date(today);
+  lastDay.setDate(lastDay.getDate() + daysAhead);
+
   const groups = new Map();
+  const addToDay = (day, entry) => {
+    const key = localDayKey(day);
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(entry);
+  };
   for (const e of events) {
     const start = parseEventStart(e.start, e.allDay);
     if (!start) continue;
-    const key = localDayKey(start);
-    if (!groups.has(key)) groups.set(key, []);
-    groups.get(key).push({ event: e, start });
+    if (e.allDay) {
+      // Multi-day all-day events appear on every day they cover.
+      for (const day of allDayEventDays(e, start, today, lastDay)) addToDay(day, { event: e, start: day });
+    } else {
+      addToDay(start, { event: e, start });
+    }
   }
 
-  const now = new Date();
+  if (!groups.size) {
+    calendarEl.innerHTML = '<div class="cal-empty">Ei tulevia tapahtumia</div>';
+    return;
+  }
+
   const todayKey = localDayKey(now);
   const tom = new Date(now);
   tom.setDate(tom.getDate() + 1);
@@ -477,7 +508,7 @@ async function pollState() {
     const data = await r.json();
     if (data.title) document.title = data.title;
     if (data.weather) renderWeather(data.weather);
-    if (data.calendar) renderCalendar(data.calendar);
+    if (data.calendar) renderCalendar(data.calendar, data.calendarDays);
     if (data.sensors !== undefined) renderSensors(data.sensors);
     if (data.electricity) renderElectricity(data.electricity);
   } catch (err) {
@@ -699,6 +730,31 @@ function ctrlStateText(state) {
   return 'Ei saatavilla';
 }
 
+// Texts for CONTROL_N_STATUS_ENTITY values (Azure VM power states).
+const CTRL_STATUS_TEXT = {
+  starting: 'Käynnistyy…',
+  running: 'Käynnissä',
+  stopping: 'Sammuu…',
+  deallocating: 'Sammuu…',
+  restarting: 'Käynnistyy uudelleen…',
+  stopped: 'Sammutettu',
+  deallocated: 'Sammutettu',
+};
+const CTRL_TRANSITIONAL = ['starting', 'stopping', 'deallocating', 'restarting'];
+const CTRL_POLL_MS = 5 * 1000;
+
+let ctrlPollTimer = null;
+const ctrlToggleUpdaters = new Map(); // control index -> apply(dto)
+
+function toggleStateText(dto) {
+  const statusText = CTRL_STATUS_TEXT[dto.status];
+  if (dto.busy) {
+    if (CTRL_TRANSITIONAL.includes(dto.status)) return statusText;
+    return dto.pendingTarget === 'off' ? 'Sammuu…' : 'Käynnistyy…';
+  }
+  return statusText || ctrlStateText(dto.state);
+}
+
 const CLIMATE_MODE_LABELS = { off: 'Pois', heat: 'Lämmitys', cool: 'Jäähdytys', auto: 'Auto' };
 const CLIMATE_DEBOUNCE_MS = 800;
 
@@ -713,7 +769,8 @@ async function postControl(index, body) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   });
-  return res.ok ? res.json() : null;
+  // 409 = control is busy; the body is its current state.
+  return res.ok || res.status === 409 ? res.json() : null;
 }
 
 function renderToggleTile(ctrl) {
@@ -722,23 +779,27 @@ function renderToggleTile(ctrl) {
   tile.innerHTML =
     `<span class="ctrl-tile-label">${escapeHtml(ctrl.label)}</span>` +
     `<span class="ctrl-tile-state"></span>`;
-  const applyState = (state) => {
-    tile.classList.toggle('on', state === 'on');
-    tile.disabled = state !== 'on' && state !== 'off';
-    tile.querySelector('.ctrl-tile-state').textContent = ctrlStateText(state);
-    ctrl.state = state;
+  // Busy = waiting for the entity to reach the requested state (the backend
+  // blocks further taps meanwhile), shown with a pulsing tile.
+  const apply = (dto) => {
+    Object.assign(ctrl, dto);
+    if (!dto.busy) delete ctrl.pendingTarget;
+    tile.classList.toggle('on', ctrl.state === 'on');
+    tile.classList.toggle('busy', !!ctrl.busy);
+    tile.disabled = !!ctrl.busy || (ctrl.state !== 'on' && ctrl.state !== 'off');
+    tile.querySelector('.ctrl-tile-state').textContent = toggleStateText(ctrl);
   };
-  applyState(ctrl.state);
+  apply(ctrl);
+  ctrlToggleUpdaters.set(ctrl.index, apply);
   tile.addEventListener('click', async () => {
-    if (tile.classList.contains('pending')) return;
-    tile.classList.add('pending');
+    if (ctrl.busy) return;
+    const target = ctrl.state === 'on' ? 'off' : 'on';
+    apply({ busy: true, pendingTarget: target });
     try {
-      const dto = await postControl(ctrl.index, { on: ctrl.state !== 'on' });
-      if (dto) applyState(dto.state);
+      const dto = await postControl(ctrl.index, { on: target === 'on' });
+      apply(dto ?? { busy: false });
     } catch (err) {
-      // leave tile as-is; next open refreshes state
-    } finally {
-      tile.classList.remove('pending');
+      apply({ busy: false });
     }
   });
   return tile;
@@ -824,6 +885,7 @@ function renderClimateTile(ctrl) {
 
 function renderControls(list) {
   ctrlGrid.innerHTML = '';
+  ctrlToggleUpdaters.clear();
   for (const ctrl of list) {
     ctrlGrid.appendChild(ctrl.type === 'climate' ? renderClimateTile(ctrl) : renderToggleTile(ctrl));
   }
@@ -842,14 +904,33 @@ async function loadControls() {
   }
 }
 
+// While the overlay is open, toggle tiles refresh in place so slow switches
+// show their progress. Climate tiles are left alone so a refresh can't
+// overwrite a target temperature that is still being adjusted.
+async function refreshToggleTiles() {
+  try {
+    const res = await apiFetch('/api/controls', { cache: 'no-store' });
+    if (!res.ok) return;
+    for (const dto of await res.json()) {
+      if (dto.type === 'toggle') ctrlToggleUpdaters.get(dto.index)?.(dto);
+    }
+  } catch (err) {
+    // keep current tiles; next tick retries
+  }
+}
+
 function openControls() {
   ctrlOverlay.hidden = false;
   loadControls();
   loadPresets();
+  clearInterval(ctrlPollTimer);
+  ctrlPollTimer = setInterval(refreshToggleTiles, CTRL_POLL_MS);
 }
 
 function closeControls() {
   ctrlOverlay.hidden = true;
+  clearInterval(ctrlPollTimer);
+  ctrlPollTimer = null;
 }
 
 ctrlBtn.addEventListener('click', openControls);
@@ -1112,18 +1193,32 @@ async function stopVoice(send) {
   voiceBtn.classList.add('thinking');
   showVoiceBubble('', 'Hetkinen…');
   try {
-    const res = await apiFetch('/api/voice', {
+    // Transcribe first so the bubble shows what was heard while the agent thinks.
+    const sttRes = await apiFetch('/api/voice/stt', {
       method: 'POST',
       headers: { 'Content-Type': 'audio/wav' },
       body: encodeWav(rec.chunks),
     });
-    if (!res.ok) throw new Error(`voice ${res.status}`);
-    const r = await res.json();
-    if (!r.text) {
+    if (!sttRes.ok) throw new Error(`voice stt ${sttRes.status}`);
+    const { text } = await sttRes.json();
+    if (!text) {
       showVoiceBubble('', 'En saanut selvää.', 4000);
       return;
     }
-    showVoiceBubble(`”${r.text}”`, r.response || '…', VOICE_BUBBLE_MS);
+    const heard = `”${text}”`;
+    showVoiceBubble(heard, 'Hetkinen…');
+
+    const askRes = await apiFetch('/api/voice/ask', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text }),
+    });
+    if (!askRes.ok) {
+      showVoiceBubble(heard, 'Puheavustaja ei vastannut.', VOICE_BUBBLE_MS);
+      return;
+    }
+    const r = await askRes.json();
+    showVoiceBubble(heard, r.response || '…', VOICE_BUBBLE_MS);
     if (r.ttsId) playVoiceReply(r.ttsId);
     // A command may have changed something shown on the dashboard.
     setTimeout(() => { pollState(); pollMusic(); }, 1500);
@@ -1163,6 +1258,7 @@ async function loadVoice() {
     // silent — voice not configured
   }
 }
+
 
 voiceBtn.addEventListener('click', () => {
   if (voiceBusy) return;

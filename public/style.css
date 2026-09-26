@@ -852,6 +852,18 @@ body.electricity-compact .panel-sensors:not(.expanded) {
   opacity: 0.5;
 }
 
+.ctrl-tile.busy {
+  opacity: 1;
+  background: rgba(245, 197, 66, 0.25);
+  color: #fff;
+  animation: ctrl-busy 1.6s ease-in-out infinite;
+}
+
+@keyframes ctrl-busy {
+  0%, 100% { background-color: rgba(245, 197, 66, 0.12); }
+  50%      { background-color: rgba(245, 197, 66, 0.35); }
+}
+
 .ctrl-tile:disabled {
   opacity: 0.35;
   cursor: default;

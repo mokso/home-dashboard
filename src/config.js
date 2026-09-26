@@ -38,7 +38,11 @@ function parseControls() {
   for (let i = 1; i <= 20; i++) {
     const entity = process.env[`CONTROL_${i}_ENTITY`];
     if (!entity) continue;
-    out.push({ entity, label: process.env[`CONTROL_${i}_LABEL`] ?? entity });
+    out.push({
+      entity,
+      label: process.env[`CONTROL_${i}_LABEL`] ?? entity,
+      statusEntity: process.env[`CONTROL_${i}_STATUS_ENTITY`] || null,
+    });
   }
   return out;
 }
@@ -83,6 +87,9 @@ export const config = {
     stt: process.env.VOICE_STT || null,
     tts: process.env.VOICE_TTS || null,
     agent: process.env.VOICE_AGENT || 'conversation.home_assistant',
+    // Try HA's built-in agent first and fall back to VOICE_AGENT only when it
+    // doesn't understand (like HA's "prefer handling commands locally").
+    preferLocal: process.env.VOICE_PREFER_LOCAL !== 'false',
     language: process.env.VOICE_LANGUAGE || 'fi-FI',
   },
 };

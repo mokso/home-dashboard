@@ -6,6 +6,15 @@ const headers = { Authorization: `Bearer ${token}` };
 // Climate modes offered on the dashboard (others like dry/fan_only are skipped).
 const CLIMATE_MODES = ['off', 'heat', 'cool', 'auto'];
 
+// Status-sensor values that mean "on its way" (Azure VM power states etc.).
+const TRANSITIONAL_STATUSES = ['starting', 'stopping', 'deallocating', 'restarting'];
+
+// After a toggle, the control stays busy until the entity reaches the requested
+// state. Slow switches (e.g. one that starts a cloud VM via an automation) would
+// otherwise look unchanged for a minute and invite a second tap.
+const PENDING_TIMEOUT_MS = 10 * 60 * 1000;
+const pending = new Map(); // control index -> { target: 'on' | 'off', until }
+
 async function fetchEntity(entity) {
   const res = await fetch(`${baseUrl}/api/states/${encodeURIComponent(entity)}`, { headers });
   if (!res.ok) throw new Error(`HA state ${entity} failed: ${res.status}`);
@@ -25,7 +34,17 @@ function domainOf(entity) {
   return entity.split('.')[0];
 }
 
-function toDto(ctrl, index, body) {
+function pendingFor(index, state) {
+  const p = pending.get(index);
+  if (!p) return null;
+  if (state === p.target || Date.now() > p.until) {
+    pending.delete(index);
+    return null;
+  }
+  return p;
+}
+
+function toDto(ctrl, index, body, statusBody) {
   const dto = {
     index,
     entity: ctrl.entity,
@@ -33,6 +52,13 @@ function toDto(ctrl, index, body) {
     type: domainOf(ctrl.entity) === 'climate' ? 'climate' : 'toggle',
     state: body?.state ?? 'unavailable',
   };
+  if (dto.type === 'toggle') {
+    const p = pendingFor(index, dto.state);
+    const status = ctrl.statusEntity ? statusBody?.state ?? null : null;
+    if (status) dto.status = status;
+    if (p) dto.pendingTarget = p.target;
+    dto.busy = !!p || TRANSITIONAL_STATUSES.includes(status);
+  }
   if (dto.type === 'climate' && body) {
     const a = body.attributes ?? {};
     dto.current = a.current_temperature ?? null;
@@ -43,6 +69,14 @@ function toDto(ctrl, index, body) {
     dto.modes = CLIMATE_MODES.filter((m) => a.hvac_modes?.includes(m));
   }
   return dto;
+}
+
+async function loadDto(ctrl, index) {
+  const [body, statusBody] = await Promise.all([
+    fetchEntity(ctrl.entity),
+    ctrl.statusEntity ? fetchEntity(ctrl.statusEntity).catch(() => null) : null,
+  ]);
+  return toDto(ctrl, index, body, statusBody);
 }
 
 // Validates the request body against the entity's current attributes and
@@ -71,10 +105,10 @@ export async function controlRoutes(fastify) {
   if (!controls.length) return;
 
   fastify.get('/api/controls', async (req, reply) => {
-    const results = await Promise.allSettled(controls.map((c) => fetchEntity(c.entity)));
+    const results = await Promise.allSettled(controls.map((c, i) => loadDto(c, i)));
     reply.header('Cache-Control', 'no-store');
-    return controls.map((c, i) =>
-      toDto(c, i, results[i].status === 'fulfilled' ? results[i].value : null),
+    return results.map((r, i) =>
+      r.status === 'fulfilled' ? r.value : toDto(controls[i], i, null, null),
     );
   });
 
@@ -88,14 +122,21 @@ export async function controlRoutes(fastify) {
     }
     const ctrl = controls[i];
     try {
-      const dto = toDto(ctrl, i, await fetchEntity(ctrl.entity));
+      const dto = await loadDto(ctrl, i);
+      if (dto.busy) {
+        reply.code(409);
+        return dto;
+      }
       const call = buildServiceCall(ctrl, dto, req.body);
       if (!call) {
         reply.code(400);
         return { error: 'invalid request for this control' };
       }
       await callService(...call);
-      return toDto(ctrl, i, await fetchEntity(ctrl.entity));
+      if (dto.type === 'toggle') {
+        pending.set(i, { target: req.body.on ? 'on' : 'off', until: Date.now() + PENDING_TIMEOUT_MS });
+      }
+      return await loadDto(ctrl, i);
     } catch (err) {
       fastify.log.error({ err }, `control failed: ${ctrl.entity}`);
       reply.code(503);

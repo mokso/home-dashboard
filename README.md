@@ -114,11 +114,14 @@ Controls use numbered env vars like sensors (`CONTROL_1_*` … `CONTROL_20_*`). 
 |---|---|---|
 | `_ENTITY` | yes | HA entity ID |
 | `_LABEL` | no | Tile label (default: entity ID) |
+| `_STATUS_ENTITY` | no | Sensor whose state is shown on an on/off tile instead of Päällä/Pois. Known values (`starting`, `running`, `stopping`, `deallocating`, `deallocated`, …, e.g. an Azure VM power state) are translated, and the tile stays locked while the status is `starting`/`stopping`/`deallocating`/`restarting`. |
 
 The tile type follows the entity's domain:
 
 - `switch.*`, `light.*`, `input_boolean.*` (anything with `turn_on`/`turn_off`) — on/off tile
 - `climate.*` — double-width tile with current temperature, target temperature −/+ (in the device's own step, within its min/max) and Off/Heat/Cool/Auto mode buttons (only the modes the device supports)
+
+After an on/off tap, the tile shows "Käynnistyy…"/"Sammuu…" and is locked until the entity actually reaches the requested state (or 10 minutes pass). The lock is kept on the server, so a second tap from another device is rejected too. This matters for slow switches, such as one that starts a cloud VM through an automation. While the overlay is open, on/off tiles refresh every 5 seconds.
 
 Only entities listed here can be changed through the dashboard; the backend rejects anything else, even though the HA token itself could control more.
 
@@ -146,10 +149,11 @@ CONTROL_2_LABEL=Downstairs
 |---|---|---|
 | `VOICE_STT` | no | HA speech-to-text entity, e.g. `stt.home_assistant_cloud`. Leave unset to hide the mic button. |
 | `VOICE_TTS` | no | HA text-to-speech entity for spoken replies; without it replies are text only |
-| `VOICE_AGENT` | no | Conversation agent (default `conversation.home_assistant`). An LLM agent also answers free-form questions. |
+| `VOICE_AGENT` | no | Conversation agent (default `conversation.home_assistant`), typically an LLM agent such as `conversation.gpt_5_4_mini` that also answers free-form questions. |
+| `VOICE_PREFER_LOCAL` | no | `true` (default): try HA's built-in agent first and only use `VOICE_AGENT` when it doesn't understand the sentence, like HA's "prefer handling commands locally". `false`: always use `VOICE_AGENT`. |
 | `VOICE_LANGUAGE` | no | Speech language (default `fi-FI`) |
 
-Tap the mic, speak, and recording stops automatically after a short pause (or tap again to stop). The transcript and answer appear in a bubble and the reply is spoken on the kiosk. Follow-up questions within 5 minutes continue the same conversation.
+Tap the mic, speak, and recording stops automatically after a short pause (or tap again to stop). The transcript and answer appear in a bubble and the reply is spoken on the kiosk. Follow-up questions within 5 minutes continue the same conversation. With the built-in agent tried first, known commands ("sytytä pihavalot", "mikä on ulkolämpötila") answer in well under a second; anything else goes to the LLM agent and takes a few seconds.
 
 The voice assistant can do anything your HA exposes to Assist, not just the dashboard's controls. Review **Settings → Voice assistants → Expose** in Home Assistant.
 

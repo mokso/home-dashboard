@@ -16,7 +16,12 @@ export async function stateRoutes(fastify) {
   fastify.get('/api/state', async (req, reply) => {
     const results = await Promise.allSettled(sources.map(([, fn]) => fn()));
 
-    const out = { ts: new Date().toISOString(), title: config.title, errors: {} };
+    const out = {
+      ts: new Date().toISOString(),
+      title: config.title,
+      calendarDays: config.calendar.daysAhead,
+      errors: {},
+    };
     sources.forEach(([key], i) => {
       const r = results[i];
       if (r.status === 'fulfilled') {

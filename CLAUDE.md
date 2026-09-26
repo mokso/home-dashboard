@@ -44,7 +44,7 @@ These routes change real state in the house — keep them tightly scoped:
 
 - `POST /api/controls/:index` only acts on entities listed in `CONTROL_N_ENTITY`; climate requests are validated against the entity's `min_temp`/`max_temp`/`hvac_modes`.
 - `POST /api/music/play` only plays URIs that are currently Music Assistant favourites; `POST /api/music/command` only accepts a fixed set of actions on `MUSIC_PLAYER`.
-- `POST /api/voice` can reach anything HA exposes to Assist — that exposure is managed in HA, not here.
+- `POST /api/voice/ask` (and so the voice assistant) can reach anything HA exposes to Assist — that exposure is managed in HA, not here.
 - Never pass the HA token or HA-signed URLs (e.g. `entity_picture`, which contains an access token) to the frontend.
 
 ## Reliability constraints (plan §10)
