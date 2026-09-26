@@ -40,6 +40,10 @@ pwForm.addEventListener('submit', (e) => {
   pollState();
   triggerPhoto();
   loadCameraList();
+  loadControls();
+  pollMusic();
+  loadPresets();
+  loadVoice();
 });
 
 // Show prompt if no password stored yet. API calls are deferred until submitted.
@@ -51,6 +55,20 @@ const slotB = { slot: document.getElementById('slot-b'), bg: document.getElement
 
 let active = slotA;
 let next = slotB;
+
+// Loads an API image into an <img>; with a password set the header has to
+// go through fetch, so the image is set from a blob URL instead of src.
+function setApiImage(img, url) {
+  if (!getPassword()) { img.src = url; return; }
+  apiFetch(url)
+    .then((r) => (r.ok ? r.blob() : null))
+    .then((blob) => {
+      if (!blob) return;
+      if (img.src.startsWith('blob:')) URL.revokeObjectURL(img.src);
+      img.src = URL.createObjectURL(blob);
+    })
+    .catch(() => {});
+}
 
 function escapeHtml(s) {
   return String(s).replace(/[&<>"']/g, (c) => ({
@@ -667,6 +685,493 @@ camClose.addEventListener('click', closeCameras);
 document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape' && !camOverlay.hidden) closeCameras();
 });
+
+// Controls -----------------------------------------------------------
+
+const ctrlBtn = document.getElementById('ctrl-btn');
+const ctrlOverlay = document.getElementById('ctrl-overlay');
+const ctrlClose = document.getElementById('ctrl-close');
+const ctrlGrid = document.getElementById('ctrl-grid');
+
+function ctrlStateText(state) {
+  if (state === 'on') return 'Päällä';
+  if (state === 'off') return 'Pois';
+  return 'Ei saatavilla';
+}
+
+const CLIMATE_MODE_LABELS = { off: 'Pois', heat: 'Lämmitys', cool: 'Jäähdytys', auto: 'Auto' };
+const CLIMATE_DEBOUNCE_MS = 800;
+
+function fmtSetpoint(n) {
+  if (n == null) return '–';
+  return `${n.toLocaleString(LOCALE, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}°`;
+}
+
+async function postControl(index, body) {
+  const res = await apiFetch(`/api/controls/${index}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  return res.ok ? res.json() : null;
+}
+
+function renderToggleTile(ctrl) {
+  const tile = document.createElement('button');
+  tile.className = 'ctrl-tile';
+  tile.innerHTML =
+    `<span class="ctrl-tile-label">${escapeHtml(ctrl.label)}</span>` +
+    `<span class="ctrl-tile-state"></span>`;
+  const applyState = (state) => {
+    tile.classList.toggle('on', state === 'on');
+    tile.disabled = state !== 'on' && state !== 'off';
+    tile.querySelector('.ctrl-tile-state').textContent = ctrlStateText(state);
+    ctrl.state = state;
+  };
+  applyState(ctrl.state);
+  tile.addEventListener('click', async () => {
+    if (tile.classList.contains('pending')) return;
+    tile.classList.add('pending');
+    try {
+      const dto = await postControl(ctrl.index, { on: ctrl.state !== 'on' });
+      if (dto) applyState(dto.state);
+    } catch (err) {
+      // leave tile as-is; next open refreshes state
+    } finally {
+      tile.classList.remove('pending');
+    }
+  });
+  return tile;
+}
+
+function renderClimateTile(ctrl) {
+  const tile = document.createElement('div');
+  tile.className = 'ctrl-tile ctrl-climate';
+  if (ctrl.state === 'unavailable') {
+    tile.classList.add('unavailable');
+    tile.innerHTML =
+      `<span class="ctrl-tile-label">${escapeHtml(ctrl.label)}</span>` +
+      `<span class="ctrl-tile-state">${ctrlStateText(ctrl.state)}</span>`;
+    return tile;
+  }
+  tile.innerHTML =
+    `<div class="ctrl-climate-head">` +
+      `<span class="ctrl-tile-label">${escapeHtml(ctrl.label)}</span>` +
+      `<span class="ctrl-climate-current">Nyt ${fmtSetpoint(ctrl.current)}</span>` +
+    `</div>` +
+    `<div class="ctrl-climate-temp">` +
+      `<button class="ctrl-climate-step" data-dir="-1" aria-label="Laske">−</button>` +
+      `<span class="ctrl-climate-target"></span>` +
+      `<button class="ctrl-climate-step" data-dir="1" aria-label="Nosta">+</button>` +
+    `</div>` +
+    `<div class="ctrl-climate-modes">` +
+      ctrl.modes.map((m) =>
+        `<button class="ctrl-climate-mode" data-mode="${m}">${CLIMATE_MODE_LABELS[m]}</button>`,
+      ).join('') +
+    `</div>`;
+
+  const targetEl = tile.querySelector('.ctrl-climate-target');
+  const apply = (dto) => {
+    Object.assign(ctrl, dto);
+    targetEl.textContent = fmtSetpoint(ctrl.target);
+    tile.classList.toggle('off', ctrl.state === 'off');
+    for (const b of tile.querySelectorAll('.ctrl-climate-mode')) {
+      b.classList.toggle('active', b.dataset.mode === ctrl.state);
+    }
+  };
+  apply(ctrl);
+
+  // +/- taps adjust the target locally and send one request after a pause,
+  // so tapping + three times sends a single set_temperature call.
+  let debounce = null;
+  for (const b of tile.querySelectorAll('.ctrl-climate-step')) {
+    b.addEventListener('click', () => {
+      if (ctrl.target == null) return;
+      const next = ctrl.target + Number(b.dataset.dir) * ctrl.step;
+      if (next < ctrl.min || next > ctrl.max) return;
+      apply({ target: Math.round(next * 10) / 10 });
+      clearTimeout(debounce);
+      debounce = setTimeout(async () => {
+        tile.classList.add('pending');
+        try {
+          await postControl(ctrl.index, { temperature: ctrl.target });
+        } catch (err) {
+          // next open refreshes state
+        } finally {
+          tile.classList.remove('pending');
+        }
+      }, CLIMATE_DEBOUNCE_MS);
+    });
+  }
+
+  for (const b of tile.querySelectorAll('.ctrl-climate-mode')) {
+    b.addEventListener('click', async () => {
+      if (b.dataset.mode === ctrl.state || tile.classList.contains('pending')) return;
+      const prev = ctrl.state;
+      apply({ state: b.dataset.mode });
+      tile.classList.add('pending');
+      try {
+        if (!(await postControl(ctrl.index, { hvac_mode: b.dataset.mode }))) apply({ state: prev });
+      } catch (err) {
+        apply({ state: prev });
+      } finally {
+        tile.classList.remove('pending');
+      }
+    });
+  }
+  return tile;
+}
+
+function renderControls(list) {
+  ctrlGrid.innerHTML = '';
+  for (const ctrl of list) {
+    ctrlGrid.appendChild(ctrl.type === 'climate' ? renderClimateTile(ctrl) : renderToggleTile(ctrl));
+  }
+}
+
+async function loadControls() {
+  try {
+    const res = await apiFetch('/api/controls', { cache: 'no-store' });
+    if (res.status === 401) { localStorage.removeItem(PW_KEY); showPasswordPrompt(); return; }
+    if (!res.ok) return;
+    const list = await res.json();
+    renderControls(list);
+    if (list.length) ctrlBtn.hidden = false;
+  } catch (err) {
+    // silent — no controls configured
+  }
+}
+
+function openControls() {
+  ctrlOverlay.hidden = false;
+  loadControls();
+  loadPresets();
+}
+
+function closeControls() {
+  ctrlOverlay.hidden = true;
+}
+
+ctrlBtn.addEventListener('click', openControls);
+ctrlClose.addEventListener('click', closeControls);
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && !ctrlOverlay.hidden) closeControls();
+});
+
+if (!_needsPassword) loadControls();
+
+// Music --------------------------------------------------------------
+
+const MUSIC_POLL_ACTIVE_MS = 5 * 1000;
+const MUSIC_POLL_IDLE_MS = 30 * 1000;
+const MUSIC_VOLUME_STEP = 0.05;
+const MUSIC_DEBOUNCE_MS = 600;
+
+const musicEl = document.getElementById('music');
+const musicArt = document.getElementById('music-art');
+const musicTitle = document.getElementById('music-title');
+const musicArtist = document.getElementById('music-artist');
+const musicVol = document.getElementById('music-vol');
+const presetsTitle = document.getElementById('music-presets-title');
+const presetsGrid = document.getElementById('music-presets');
+
+let music = null;
+let musicArtKey = null;
+let musicPollTimer = null;
+let musicVolDebounce = null;
+
+function isMusicActive(m) {
+  return m && (m.state === 'playing' || m.state === 'paused');
+}
+
+function renderMusic(m) {
+  music = m;
+  musicEl.hidden = !isMusicActive(m);
+  if (musicEl.hidden) return;
+  musicEl.classList.toggle('playing', m.state === 'playing');
+  musicTitle.textContent = m.title ?? '';
+  musicArtist.textContent = m.artist ?? '';
+  musicVol.textContent = m.volume == null ? '' : `${Math.round(m.volume * 100)}%`;
+  if (m.artKey !== musicArtKey) {
+    musicArtKey = m.artKey;
+    musicArt.hidden = !m.artKey;
+    if (m.artKey) setApiImage(musicArt, `/api/music/art?k=${m.artKey}`);
+  }
+}
+
+async function pollMusic() {
+  clearTimeout(musicPollTimer);
+  try {
+    const res = await apiFetch('/api/music', { cache: 'no-store' });
+    if (res.status === 404) return; // no player configured — stop polling
+    if (res.ok) renderMusic(await res.json());
+  } catch (err) {
+    // keep last render; retry on next tick
+  }
+  musicPollTimer = setTimeout(pollMusic, isMusicActive(music) ? MUSIC_POLL_ACTIVE_MS : MUSIC_POLL_IDLE_MS);
+}
+
+async function postMusic(url, body) {
+  musicEl.classList.add('pending');
+  try {
+    const res = await apiFetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    if (res.ok) renderMusic(await res.json());
+    return res.ok;
+  } catch (err) {
+    return false;
+  } finally {
+    musicEl.classList.remove('pending');
+  }
+}
+
+for (const b of musicEl.querySelectorAll('[data-action]')) {
+  b.addEventListener('click', () => postMusic('/api/music/command', { action: b.dataset.action }));
+}
+
+// Volume +/- adjusts locally and sends one request after a pause.
+for (const b of musicEl.querySelectorAll('[data-vol]')) {
+  b.addEventListener('click', () => {
+    if (music?.volume == null) return;
+    const next = Math.min(1, Math.max(0, music.volume + Number(b.dataset.vol) * MUSIC_VOLUME_STEP));
+    renderMusic({ ...music, volume: Math.round(next * 100) / 100 });
+    clearTimeout(musicVolDebounce);
+    musicVolDebounce = setTimeout(
+      () => postMusic('/api/music/command', { action: 'volume', value: music.volume }),
+      MUSIC_DEBOUNCE_MS,
+    );
+  });
+}
+
+function renderPresets(list) {
+  presetsGrid.innerHTML = '';
+  presetsTitle.hidden = !list.length;
+  for (const p of list) {
+    const tile = document.createElement('button');
+    tile.className = 'music-preset';
+    tile.innerHTML = `<span class="music-preset-name">${escapeHtml(p.name)}</span>`;
+    if (p.hasImage) {
+      const img = document.createElement('img');
+      img.alt = '';
+      tile.prepend(img);
+      setApiImage(img, `/api/music/presets/${p.index}/image?u=${encodeURIComponent(p.uri)}`);
+    }
+    tile.addEventListener('click', async () => {
+      if (tile.classList.contains('pending')) return;
+      tile.classList.add('pending');
+      const ok = await postMusic('/api/music/play', { uri: p.uri });
+      tile.classList.remove('pending');
+      if (ok) {
+        closeControls();
+        pollMusic();
+      }
+    });
+    presetsGrid.appendChild(tile);
+  }
+}
+
+async function loadPresets() {
+  try {
+    const res = await apiFetch('/api/music/presets', { cache: 'no-store' });
+    if (!res.ok) return;
+    const list = await res.json();
+    renderPresets(list);
+    if (list.length) ctrlBtn.hidden = false;
+  } catch (err) {
+    // silent — no music configured
+  }
+}
+
+if (!_needsPassword) {
+  pollMusic();
+  loadPresets();
+}
+
+// Voice assistant ---------------------------------------------------
+// Tap to talk: records 16 kHz mono audio until a pause in speech, then the
+// backend runs it through HA speech-to-text, the conversation agent and TTS.
+
+const VOICE_SAMPLE_RATE = 16000;
+const VOICE_SPEECH_RMS = 0.02;       // level counted as speech
+const VOICE_END_SILENCE_MS = 1200;   // pause that ends the recording
+const VOICE_NO_SPEECH_MS = 6000;     // give up if nothing is said
+const VOICE_MAX_MS = 12000;
+const VOICE_BUBBLE_MS = 8000;
+
+const voiceBtn = document.getElementById('voice-btn');
+const voiceBubble = document.getElementById('voice-bubble');
+const voiceHeard = document.getElementById('voice-heard');
+const voiceAnswer = document.getElementById('voice-answer');
+
+const VOICE_WORKLET = `
+class Recorder extends AudioWorkletProcessor {
+  process(inputs) {
+    const ch = inputs[0][0];
+    if (ch) this.port.postMessage(ch.slice(0));
+    return true;
+  }
+}
+registerProcessor('recorder', Recorder);`;
+
+let voiceRec = null;       // active recording session
+let voiceBusy = false;     // waiting for HA
+let voiceHideTimer = null;
+let voiceAudio = null;
+
+function showVoiceBubble(heard, answer, hideAfterMs) {
+  clearTimeout(voiceHideTimer);
+  voiceHeard.textContent = heard;
+  voiceAnswer.textContent = answer;
+  voiceBubble.hidden = false;
+  if (hideAfterMs) voiceHideTimer = setTimeout(hideVoiceBubble, hideAfterMs);
+}
+
+function hideVoiceBubble() {
+  clearTimeout(voiceHideTimer);
+  voiceBubble.hidden = true;
+}
+
+function encodeWav(chunks) {
+  const length = chunks.reduce((n, c) => n + c.length, 0);
+  const buf = new ArrayBuffer(44 + length * 2);
+  const v = new DataView(buf);
+  const str = (o, s) => { for (let i = 0; i < s.length; i++) v.setUint8(o + i, s.charCodeAt(i)); };
+  str(0, 'RIFF'); v.setUint32(4, 36 + length * 2, true); str(8, 'WAVE');
+  str(12, 'fmt '); v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, 1, true);
+  v.setUint32(24, VOICE_SAMPLE_RATE, true); v.setUint32(28, VOICE_SAMPLE_RATE * 2, true);
+  v.setUint16(32, 2, true); v.setUint16(34, 16, true);
+  str(36, 'data'); v.setUint32(40, length * 2, true);
+  let o = 44;
+  for (const c of chunks) {
+    for (let i = 0; i < c.length; i++, o += 2) {
+      const s = Math.max(-1, Math.min(1, c[i]));
+      v.setInt16(o, s < 0 ? s * 0x8000 : s * 0x7fff, true);
+    }
+  }
+  return new Blob([buf], { type: 'audio/wav' });
+}
+
+async function startVoice() {
+  if (voiceAudio) { voiceAudio.pause(); voiceAudio = null; }
+  let stream;
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({
+      audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+    });
+  } catch (err) {
+    showVoiceBubble('', 'Mikrofoni ei ole käytettävissä.', VOICE_BUBBLE_MS);
+    return;
+  }
+  const ctx = new AudioContext({ sampleRate: VOICE_SAMPLE_RATE });
+  const moduleUrl = URL.createObjectURL(new Blob([VOICE_WORKLET], { type: 'application/javascript' }));
+  await ctx.audioWorklet.addModule(moduleUrl);
+  URL.revokeObjectURL(moduleUrl);
+  const source = ctx.createMediaStreamSource(stream);
+  const node = new AudioWorkletNode(ctx, 'recorder');
+  source.connect(node);
+  node.connect(ctx.destination); // keeps the node pulled; it outputs silence
+
+  const startedAt = Date.now();
+  const rec = { stream, ctx, chunks: [], heardSpeech: false, lastSpeechAt: 0 };
+  voiceRec = rec;
+  node.port.onmessage = (e) => {
+    const samples = e.data;
+    rec.chunks.push(samples);
+    let sum = 0;
+    for (let i = 0; i < samples.length; i++) sum += samples[i] * samples[i];
+    const now = Date.now();
+    if (Math.sqrt(sum / samples.length) > VOICE_SPEECH_RMS) {
+      rec.heardSpeech = true;
+      rec.lastSpeechAt = now;
+    }
+    if (rec.heardSpeech && now - rec.lastSpeechAt > VOICE_END_SILENCE_MS) stopVoice(true);
+    else if (!rec.heardSpeech && now - startedAt > VOICE_NO_SPEECH_MS) stopVoice(false);
+    else if (now - startedAt > VOICE_MAX_MS) stopVoice(true);
+  };
+
+  voiceBtn.classList.add('listening');
+  showVoiceBubble('', 'Kuuntelen…');
+}
+
+async function stopVoice(send) {
+  const rec = voiceRec;
+  if (!rec) return;
+  voiceRec = null;
+  rec.stream.getTracks().forEach((t) => t.stop());
+  rec.ctx.close();
+  voiceBtn.classList.remove('listening');
+  if (!send || !rec.heardSpeech) {
+    showVoiceBubble('', 'En kuullut mitään.', 3000);
+    return;
+  }
+
+  voiceBusy = true;
+  voiceBtn.classList.add('thinking');
+  showVoiceBubble('', 'Hetkinen…');
+  try {
+    const res = await apiFetch('/api/voice', {
+      method: 'POST',
+      headers: { 'Content-Type': 'audio/wav' },
+      body: encodeWav(rec.chunks),
+    });
+    if (!res.ok) throw new Error(`voice ${res.status}`);
+    const r = await res.json();
+    if (!r.text) {
+      showVoiceBubble('', 'En saanut selvää.', 4000);
+      return;
+    }
+    showVoiceBubble(`”${r.text}”`, r.response || '…', VOICE_BUBBLE_MS);
+    if (r.ttsId) playVoiceReply(r.ttsId);
+    // A command may have changed something shown on the dashboard.
+    setTimeout(() => { pollState(); pollMusic(); }, 1500);
+  } catch (err) {
+    showVoiceBubble('', 'Puheavustaja ei vastannut.', VOICE_BUBBLE_MS);
+  } finally {
+    voiceBusy = false;
+    voiceBtn.classList.remove('thinking');
+  }
+}
+
+async function playVoiceReply(id) {
+  try {
+    const res = await apiFetch(`/api/voice/tts/${id}`);
+    if (!res.ok) return;
+    const url = URL.createObjectURL(await res.blob());
+    voiceAudio = new Audio(url);
+    // Keep the answer on screen until the reply has been spoken.
+    clearTimeout(voiceHideTimer);
+    voiceAudio.addEventListener('ended', () => {
+      URL.revokeObjectURL(url);
+      voiceHideTimer = setTimeout(hideVoiceBubble, 4000);
+    });
+    await voiceAudio.play();
+  } catch (err) {
+    voiceHideTimer = setTimeout(hideVoiceBubble, VOICE_BUBBLE_MS);
+  }
+}
+
+async function loadVoice() {
+  // Microphone access needs HTTPS (or localhost).
+  if (!window.isSecureContext || !navigator.mediaDevices?.getUserMedia) return;
+  try {
+    const res = await apiFetch('/api/voice');
+    if (res.ok) voiceBtn.hidden = false;
+  } catch (err) {
+    // silent — voice not configured
+  }
+}
+
+voiceBtn.addEventListener('click', () => {
+  if (voiceBusy) return;
+  if (voiceRec) stopVoice(true);
+  else startVoice();
+});
+voiceBubble.addEventListener('click', hideVoiceBubble);
+
+if (!_needsPassword) loadVoice();
 
 // Daily reload at 04:00 — guards against multi-week JS-state drift.
 (function scheduleDailyReload() {

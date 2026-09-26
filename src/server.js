@@ -7,6 +7,9 @@ import { photoRoutes } from './routes/photo.js';
 import { stateRoutes } from './routes/state.js';
 import { sensorRoutes } from './routes/sensors.js';
 import { cameraRoutes } from './routes/cameras.js';
+import { controlRoutes } from './routes/controls.js';
+import { musicRoutes } from './routes/music.js';
+import { voiceRoutes } from './routes/voice.js';
 import { warmup, setLogger } from './sources/immich.js';
 import { health } from './lib/health.js';
 
@@ -38,6 +41,9 @@ await fastify.register(photoRoutes);
 await fastify.register(stateRoutes);
 await fastify.register(sensorRoutes);
 await fastify.register(cameraRoutes);
+await fastify.register(controlRoutes);
+await fastify.register(musicRoutes);
+await fastify.register(voiceRoutes);
 
 fastify.get('/api/health', async () => ({
   ok: true,

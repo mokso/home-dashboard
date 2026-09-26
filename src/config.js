@@ -33,6 +33,16 @@ function parseSensors() {
   return out;
 }
 
+function parseControls() {
+  const out = [];
+  for (let i = 1; i <= 20; i++) {
+    const entity = process.env[`CONTROL_${i}_ENTITY`];
+    if (!entity) continue;
+    out.push({ entity, label: process.env[`CONTROL_${i}_LABEL`] ?? entity });
+  }
+  return out;
+}
+
 export const config = {
   port: Number(process.env.PORT) || 3000,
   host: process.env.HOST || '0.0.0.0',
@@ -64,4 +74,15 @@ export const config = {
   },
   sensors: parseSensors(),
   cameras: csv('CAMERA_ENTITIES'),
+  controls: parseControls(),
+  music: {
+    player: process.env.MUSIC_PLAYER || null,
+    presetLimit: num('MUSIC_PRESET_LIMIT', 8),
+  },
+  voice: {
+    stt: process.env.VOICE_STT || null,
+    tts: process.env.VOICE_TTS || null,
+    agent: process.env.VOICE_AGENT || 'conversation.home_assistant',
+    language: process.env.VOICE_LANGUAGE || 'fi-FI',
+  },
 };

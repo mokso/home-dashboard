@@ -31,15 +31,68 @@
 
     <div class="panel panel-electricity" id="electricity"></div>
 
+    <div class="panel panel-music" id="music" hidden>
+      <img class="music-art" id="music-art" alt="" hidden />
+      <div class="music-info">
+        <div class="music-title" id="music-title"></div>
+        <div class="music-artist" id="music-artist"></div>
+      </div>
+      <div class="music-controls">
+      <div class="music-buttons">
+        <button class="music-btn" data-action="previous" aria-label="Edellinen"><svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" fill="currentColor"><path d="M6 5h2v14H6zM20 5v14L9 12z"/></svg></button>
+        <button class="music-btn music-pp" data-action="play_pause" aria-label="Toista/tauko">
+          <svg class="icon-play" viewBox="0 0 24 24" width="26" height="26" aria-hidden="true" fill="currentColor"><path d="M7 4v16l13-8z"/></svg>
+          <svg class="icon-pause" viewBox="0 0 24 24" width="26" height="26" aria-hidden="true" fill="currentColor"><path d="M6 4h4v16H6zM14 4h4v16h-4z"/></svg>
+        </button>
+        <button class="music-btn" data-action="next" aria-label="Seuraava"><svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" fill="currentColor"><path d="M16 5h2v14h-2zM4 5v14l11-7z"/></svg></button>
+      </div>
+      <div class="music-volume">
+        <button class="music-btn" data-vol="-1" aria-label="Hiljemmalle">−</button>
+        <span class="music-vol" id="music-vol"></span>
+        <button class="music-btn" data-vol="1" aria-label="Kovemmalle">+</button>
+      </div>
+      </div>
+    </div>
+
     <div class="caption" id="caption-a"></div>
     <div class="caption" id="caption-b"></div>
 
-    <button class="cam-btn" id="cam-btn" title="Kamerat" hidden>
+    <div class="fab-row">
+    <button class="fab-btn" id="cam-btn" title="Kamerat" hidden>
       <svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
         <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
         <circle cx="12" cy="13" r="4"/>
       </svg>
     </button>
+
+    <button class="fab-btn" id="ctrl-btn" title="Ohjaus" hidden>
+      <svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="1" y="6" width="22" height="12" rx="6"/>
+        <circle cx="16" cy="12" r="3"/>
+      </svg>
+    </button>
+
+    <button class="fab-btn voice-btn" id="voice-btn" title="Puheavustaja" hidden>
+      <svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="9" y="2" width="6" height="12" rx="3"/>
+        <path d="M5 11a7 7 0 0 0 14 0M12 18v4"/>
+      </svg>
+    </button>
+    </div>
+
+    <div class="voice-bubble" id="voice-bubble" hidden>
+      <div class="voice-heard" id="voice-heard"></div>
+      <div class="voice-answer" id="voice-answer"></div>
+    </div>
+
+    <div class="ctrl-overlay" id="ctrl-overlay" hidden>
+      <button class="cam-close" id="ctrl-close" aria-label="Sulje">✕</button>
+      <div class="ctrl-scroll">
+        <div class="ctrl-grid" id="ctrl-grid"></div>
+        <h2 class="ctrl-section" id="music-presets-title" hidden>Musiikki</h2>
+        <div class="ctrl-grid music-presets" id="music-presets"></div>
+      </div>
+    </div>
 
     <div class="cam-overlay" id="cam-overlay" hidden>
       <button class="cam-close" id="cam-close" aria-label="Sulje">✕</button>
