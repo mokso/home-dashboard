@@ -1004,21 +1004,21 @@ body.electricity-compact .panel-sensors:not(.expanded) {
 .music-badge {
   position: fixed;
   left: 32px;
-  bottom: 5px;
+  bottom: 4px;
   max-width: 560px;
-  height: 22px;
+  height: 25px;
   padding: 0 12px 0 9px;
   display: flex;
   align-items: center;
   gap: 6px;
   border: none;
-  border-radius: 11px;
+  border-radius: 13px;
   background: rgba(0, 0, 0, 0.4);
   backdrop-filter: blur(6px);
   -webkit-backdrop-filter: blur(6px);
   color: #fff;
   font-family: inherit;
-  font-size: 13px;
+  font-size: 16px;
   line-height: 1;
   cursor: pointer;
   opacity: 0.8;
