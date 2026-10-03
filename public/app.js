@@ -970,6 +970,9 @@ const mvSpeakers = document.getElementById('mv-speakers');
 const mvTabs = document.getElementById('mv-tabs');
 const mvGrid = document.getElementById('mv-grid');
 const musicVol = document.getElementById('music-vol');
+const musicBadge = document.getElementById('music-badge');
+const musicBadgeText = document.getElementById('music-badge-text');
+const MUSIC_BADGE_SCROLL_PX_S = 40;
 
 let music = null;
 let musicReceivedAt = 0;
@@ -982,6 +985,7 @@ let musicIdleTimer = null;
 let musicLibrary = [];
 let musicLibraryKey = null;
 let musicTab = null;
+let musicBadgeKey = null;
 
 function isMusicActive(m) {
   return m && (m.state === 'playing' || m.state === 'paused');
@@ -1047,6 +1051,24 @@ function renderNowPlaying() {
   renderProgress();
 }
 
+// Text that doesn't fit scrolls right to left as a seamless loop (two
+// copies side by side). Measured only when the text changes, and only while
+// visible, since a hidden badge has no width.
+function renderMusicBadge(text, show) {
+  musicBadge.hidden = !show;
+  if (!show || text === musicBadgeKey) return;
+  musicBadgeKey = text;
+  musicBadgeText.classList.remove('scrolling');
+  musicBadgeText.innerHTML = `<span class="music-badge-track"><span>${escapeHtml(text)}</span></span>`;
+  if (musicBadgeText.scrollWidth <= musicBadgeText.clientWidth) return;
+  const track = musicBadgeText.firstElementChild;
+  track.insertAdjacentHTML('beforeend', `<span aria-hidden="true">${escapeHtml(text)}</span>`);
+  musicBadgeText.classList.add('scrolling');
+  const shift = track.firstElementChild.offsetWidth;
+  track.style.setProperty('--badge-shift', `-${shift}px`);
+  track.style.setProperty('--badge-duration', `${shift / MUSIC_BADGE_SCROLL_PX_S}s`);
+}
+
 function renderMusic(m) {
   // Keep the locally adjusted volume while a volume change is still pending.
   if (musicVolDebounce && music) m = { ...m, volume: music.volume };
@@ -1054,6 +1076,9 @@ function renderMusic(m) {
   musicReceivedAt = Date.now();
   musicBtn.hidden = false;
   musicBtn.classList.toggle('playing', m.state === 'playing');
+  // Slim "artist – song" badge under the buttons while something plays.
+  const badgeText = [m.artist, m.title].filter((s) => s && s !== '[unknown]').join(' – ');
+  renderMusicBadge(badgeText, m.state === 'playing' && !!badgeText);
   if (!musicOverlay.hidden) renderNowPlaying();
 }
 
@@ -1237,6 +1262,7 @@ function closeMusic() {
 }
 
 musicBtn.addEventListener('click', openMusic);
+musicBadge.addEventListener('click', openMusic);
 musicClose.addEventListener('click', closeMusic);
 musicOverlay.addEventListener('pointerdown', resetMusicIdle);
 mvGrid.addEventListener('scroll', resetMusicIdle, { passive: true });

@@ -1000,6 +1000,69 @@ body.electricity-compact .panel-sensors:not(.expanded) {
   50%      { transform: scaleY(1); }
 }
 
+/* Slim now-playing badge in the strip under the round buttons. */
+.music-badge {
+  position: fixed;
+  left: 32px;
+  bottom: 5px;
+  max-width: 560px;
+  height: 22px;
+  padding: 0 12px 0 9px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  border: none;
+  border-radius: 11px;
+  background: rgba(0, 0, 0, 0.4);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  color: #fff;
+  font-family: inherit;
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+  opacity: 0.8;
+}
+
+.music-badge[hidden] {
+  display: none;
+}
+
+.music-badge svg {
+  flex-shrink: 0;
+  color: #f5c542;
+}
+
+.music-badge-text {
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.music-badge-track {
+  display: inline-block;
+}
+
+/* Too long to fit: scroll right to left; soft edges hide the cut. */
+.music-badge-text.scrolling {
+  text-overflow: clip;
+  -webkit-mask-image: linear-gradient(to right, transparent, #000 10px, #000 calc(100% - 10px), transparent);
+  mask-image: linear-gradient(to right, transparent, #000 10px, #000 calc(100% - 10px), transparent);
+}
+
+.music-badge-text.scrolling .music-badge-track {
+  animation: music-badge-scroll var(--badge-duration) linear infinite;
+}
+
+.music-badge-text.scrolling .music-badge-track span {
+  padding-right: 48px;
+}
+
+@keyframes music-badge-scroll {
+  to { transform: translateX(var(--badge-shift)); }
+}
+
 /* Music view: now playing on the left, library on the right. */
 .music-overlay {
   position: fixed;
