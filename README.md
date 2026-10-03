@@ -14,7 +14,7 @@ Built as a DAKboard replacement running on a 1st-gen Surface Pro.
 - **Electricity prices** — Finnish spot prices (spot-hinta.fi) with color-coded bar chart; click to toggle compact/expanded
 - **Cameras** — button opens a 2×2 live view of Frigate (or any HA) cameras; tap a tile to go fullscreen, tap again to return to the grid
 - **Controls** — button opens a tile overlay of Home Assistant toggles (switches, lights, input booleans) and climate tiles (target temperature −/+ and heat/cool/auto/off modes)
-- **Music** — a now-playing card (cover art, play/pause, skip, volume) appears at the top while a Music Assistant player is playing; Music Assistant favourites show up as one-tap presets in the controls overlay
+- **Music** — a music button (animated while playing) opens a fullscreen music view: cover art, progress bar with seek, play/pause/skip, shuffle/repeat, volume, next track and speaker picker, plus the Music Assistant library (recently played, playlists, albums, artists) to start something new
 - **Voice assistant** — tap-to-talk mic button that runs speech through Home Assistant Assist (speech-to-text → conversation agent → spoken reply)
 
 ## Stack
@@ -108,7 +108,7 @@ SENSOR_2_DECIMALS=1
 
 ### Controls
 
-Controls use numbered env vars like sensors (`CONTROL_1_*` … `CONTROL_20_*`). The controls button is hidden when none are configured (and no music presets exist).
+Controls use numbered env vars like sensors (`CONTROL_1_*` … `CONTROL_20_*`). The controls button is hidden when none are configured.
 
 | Suffix | Required | Description |
 |---|---|---|
@@ -136,11 +136,17 @@ CONTROL_2_LABEL=Downstairs
 
 | Variable | Required | Description |
 |---|---|---|
-| `MUSIC_PLAYER` | no | A Music Assistant `media_player` entity. Leave unset to disable music entirely. |
-| `MUSIC_PRESET_LIMIT` | no | Maximum number of favourite presets shown (default 8) |
+| `MUSIC_PLAYER` | no | A Music Assistant `media_player` entity. Leave unset to disable music entirely. This is the default speaker. |
+| `MUSIC_SPEAKERS` | no | Comma-separated Music Assistant players to choose from, each optionally `entity=Label` (default label: HA friendly name). `MUSIC_PLAYER` is always included. The picker is hidden with only one speaker. |
+| `MUSIC_LIBRARY_LIMIT` | no | Maximum items per library tab (default 500) |
+| `MUSIC_ASSISTANT_URL` | no | Music Assistant server, e.g. `http://192.168.1.10:8095`. Used only for the "Viimeksi soitetut" (recently played) tab. |
+| `MUSIC_ASSISTANT_TOKEN` | no | Long-lived Music Assistant token for the above (create one in Music Assistant's settings). Without URL and token the recently played tab is hidden. |
 
-- The now-playing card is shown only while the player is playing or paused.
-- Presets are your Music Assistant **favourites** (playlists, radio stations, albums, artists — star them in the Music Assistant app). The list refreshes every 10 minutes; no restart needed. Tapping a preset replaces the queue and starts playback.
+- The music button sits in the bottom-left row and shows bouncing bars while something plays. It opens the music view, which closes after 3 minutes without touches.
+- The library tabs list your Music Assistant playlists, albums and artists, favourites first. The list refreshes every 10 minutes; no restart needed. Tapping an item replaces the queue and starts playback on the selected speaker.
+- Recently played is read straight from the Music Assistant API, because HA's library service can't tell never-played items apart. The token is only used for that read; all playback goes through HA.
+- Choosing another speaker while music plays moves the queue there (`music_assistant.transfer_queue`). The selected speaker is kept in memory and resets to `MUSIC_PLAYER` when the server restarts.
+- "Seuraavaksi" shows the next track in the queue. HA has no service to jump to an arbitrary queue item, so the queue itself isn't browsable.
 - Requires the Music Assistant integration in Home Assistant. Use the Music Assistant player entity (the one with `app_id: music_assistant`), not a duplicate entity from another integration such as Google Cast.
 
 ### Voice assistant
@@ -163,7 +169,7 @@ The dashboard started read-only; with controls, music or voice enabled it can ch
 
 - Set `DASHBOARD_PASSWORD` — it protects every `/api/*` route, including the ones that switch devices.
 - Controls are allowlisted: only entities in `CONTROL_N_ENTITY` can be switched, and climate requests are validated against the device's own limits and modes.
-- Music presets only play items that are currently Music Assistant favourites.
+- Music only plays items from the library listing the server itself served, only on speakers listed in `MUSIC_PLAYER`/`MUSIC_SPEAKERS`, and commands are a fixed set (play/pause, skip, volume, seek, shuffle, repeat).
 - Don't expose the dashboard to the internet.
 
 ## Health check

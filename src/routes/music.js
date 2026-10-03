@@ -1,7 +1,19 @@
 import { config } from '../config.js';
-import { getPlayer, fetchPlayer, fetchArt, getPresets, callService } from '../sources/music.js';
+import {
+  getPlayer,
+  fetchPlayer,
+  fetchArt,
+  getLibrary,
+  getSpeakerNames,
+  getActivePlayer,
+  setActivePlayer,
+  callService,
+} from '../sources/music.js';
 
-const { player } = config.music;
+const { player, speakers } = config.music;
+
+const REPEAT_MODES = ['off', 'all', 'one'];
+const MAX_SEEK_S = 24 * 60 * 60;
 
 const COMMANDS = {
   play_pause: () => ['media_play_pause', {}],
@@ -11,7 +23,32 @@ const COMMANDS = {
     typeof value === 'number' && value >= 0 && value <= 1
       ? ['volume_set', { volume_level: value }]
       : null,
+  shuffle: (value) => (typeof value === 'boolean' ? ['shuffle_set', { shuffle: value }] : null),
+  repeat: (value) => (REPEAT_MODES.includes(value) ? ['repeat_set', { repeat: value }] : null),
+  seek: (value) =>
+    typeof value === 'number' && value >= 0 && value <= MAX_SEEK_S
+      ? ['media_seek', { seek_position: Math.round(value) }]
+      : null,
 };
+
+// Adds what the frontend needs on top of the cached player state: the
+// speaker list and the playback position as of this response, computed on
+// the server so the kiosk's clock doesn't matter.
+async function playerDto(p) {
+  const names = await getSpeakerNames();
+  const active = getActivePlayer();
+  let elapsed = p.position;
+  if (p.state === 'playing' && p.position != null && p.positionAt) {
+    elapsed = p.position + (Date.now() - p.positionAt) / 1000;
+  }
+  if (elapsed != null && p.duration) elapsed = Math.min(elapsed, p.duration);
+  const { entity, position, positionAt, ...rest } = p;
+  return {
+    ...rest,
+    elapsed,
+    speakers: speakers.map((s, index) => ({ index, name: names[index], active: s.entity === active })),
+  };
+}
 
 export async function musicRoutes(fastify) {
   if (!player) return;
@@ -19,9 +56,9 @@ export async function musicRoutes(fastify) {
   fastify.get('/api/music', async (req, reply) => {
     reply.header('Cache-Control', 'no-store');
     try {
-      return await getPlayer();
+      return await playerDto(await getPlayer());
     } catch (err) {
-      return { state: 'unavailable' };
+      return { state: 'unavailable', speakers: [] };
     }
   });
 
@@ -49,8 +86,8 @@ export async function musicRoutes(fastify) {
     }
     const [service, data] = call;
     try {
-      await callService('media_player', service, { entity_id: player, ...data });
-      return await fetchPlayer();
+      await callService('media_player', service, { entity_id: getActivePlayer(), ...data });
+      return await playerDto(await fetchPlayer());
     } catch (err) {
       fastify.log.error({ err }, `music command failed: ${service}`);
       reply.code(503);
@@ -58,25 +95,63 @@ export async function musicRoutes(fastify) {
     }
   });
 
-  fastify.get('/api/music/presets', async (req, reply) => {
+  // Picks the speaker the dashboard controls. If something is playing, the
+  // queue moves along with it.
+  fastify.post('/api/music/speaker', async (req, reply) => {
+    const target = speakers[req.body?.index];
+    if (!Number.isInteger(req.body?.index) || !target) {
+      reply.code(400);
+      return { error: 'invalid speaker' };
+    }
+    const source = getActivePlayer();
+    try {
+      if (target.entity !== source) {
+        const current = await fetchPlayer(source).catch(() => null);
+        if (current?.state === 'playing' || current?.state === 'paused') {
+          await callService('music_assistant', 'transfer_queue', {
+            entity_id: target.entity,
+            source_player: source,
+            auto_play: current.state === 'playing',
+          });
+        }
+        setActivePlayer(target.entity);
+      }
+      return await playerDto(await fetchPlayer());
+    } catch (err) {
+      fastify.log.error({ err }, 'music speaker change failed');
+      reply.code(503);
+      return { error: 'player unavailable' };
+    }
+  });
+
+  fastify.get('/api/music/library', async (req, reply) => {
     reply.header('Cache-Control', 'no-store');
     try {
-      const presets = await getPresets();
-      return presets.map((p, index) => ({ index, uri: p.uri, name: p.name, mediaType: p.mediaType, hasImage: !!p.image }));
+      const items = await getLibrary();
+      return items.map((p, index) => ({
+        index,
+        group: p.group,
+        uri: p.uri,
+        name: p.name,
+        subtitle: p.subtitle,
+        mediaType: p.mediaType,
+        favorite: p.favorite,
+        hasImage: !!p.image,
+      }));
     } catch (err) {
-      fastify.log.error({ err }, 'music presets fetch failed');
+      fastify.log.error({ err }, 'music library fetch failed');
       return [];
     }
   });
 
-  fastify.get('/api/music/presets/:index/image', async (req, reply) => {
+  fastify.get('/api/music/library/:index/image', async (req, reply) => {
     try {
-      const preset = (await getPresets())[Number(req.params.index)];
-      if (!preset?.image) {
+      const item = (await getLibrary())[Number(req.params.index)];
+      if (!item?.image) {
         reply.code(404);
         return { error: 'no image' };
       }
-      const res = await fetch(preset.image);
+      const res = await fetch(item.image);
       if (!res.ok) {
         reply.code(502);
         return { error: `image host returned ${res.status}` };
@@ -90,23 +165,23 @@ export async function musicRoutes(fastify) {
     }
   });
 
-  // Plays by URI, but only URIs that are currently in the favourites list.
+  // Plays by URI, but only URIs the library listing currently contains.
   fastify.post('/api/music/play', async (req, reply) => {
     try {
-      const preset = (await getPresets()).find((p) => p.uri === req.body?.uri);
-      if (!preset) {
+      const item = (await getLibrary()).find((p) => p.uri === req.body?.uri);
+      if (!item) {
         reply.code(404);
-        return { error: 'preset not found' };
+        return { error: 'item not found' };
       }
       await callService('music_assistant', 'play_media', {
-        entity_id: player,
-        media_id: preset.uri,
-        media_type: preset.mediaType,
+        entity_id: getActivePlayer(),
+        media_id: item.uri,
+        media_type: item.mediaType,
         enqueue: 'replace',
       });
-      return await fetchPlayer();
+      return await playerDto(await fetchPlayer());
     } catch (err) {
-      fastify.log.error({ err }, 'music preset play failed');
+      fastify.log.error({ err }, 'music play failed');
       reply.code(503);
       return { error: 'player unavailable' };
     }

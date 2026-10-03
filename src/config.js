@@ -15,6 +15,23 @@ function num(name, defaultValue) {
   return Number.isFinite(n) ? n : defaultValue;
 }
 
+// MUSIC_SPEAKERS=media_player.a=Keittiö,media_player.b — label optional.
+// MUSIC_PLAYER is always included (first) so the default stays selectable.
+function parseSpeakers() {
+  const player = process.env.MUSIC_PLAYER;
+  if (!player) return [];
+  const list = (process.env.MUSIC_SPEAKERS ?? '')
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean)
+    .map((s) => {
+      const [entity, ...label] = s.split('=');
+      return { entity: entity.trim(), label: label.join('=').trim() || null };
+    });
+  if (!list.some((s) => s.entity === player)) list.unshift({ entity: player, label: null });
+  return list;
+}
+
 function parseSensors() {
   const out = [];
   for (let i = 1; i <= 20; i++) {
@@ -81,7 +98,13 @@ export const config = {
   controls: parseControls(),
   music: {
     player: process.env.MUSIC_PLAYER || null,
-    presetLimit: num('MUSIC_PRESET_LIMIT', 8),
+    speakers: parseSpeakers(),
+    libraryLimit: num('MUSIC_LIBRARY_LIMIT', 500),
+    // Optional direct Music Assistant API access, for "recently played".
+    assistant: {
+      url: (process.env.MUSIC_ASSISTANT_URL || '').replace(/\/+$/, '') || null,
+      token: process.env.MUSIC_ASSISTANT_TOKEN || null,
+    },
   },
   voice: {
     stt: process.env.VOICE_STT || null,

@@ -42,7 +42,6 @@ pwForm.addEventListener('submit', (e) => {
   loadCameraList();
   loadControls();
   pollMusic();
-  loadPresets();
   loadVoice();
 });
 
@@ -922,7 +921,6 @@ async function refreshToggleTiles() {
 function openControls() {
   ctrlOverlay.hidden = false;
   loadControls();
-  loadPresets();
   clearInterval(ctrlPollTimer);
   ctrlPollTimer = setInterval(refreshToggleTiles, CTRL_POLL_MS);
 }
@@ -942,42 +940,121 @@ document.addEventListener('keydown', (e) => {
 if (!_needsPassword) loadControls();
 
 // Music --------------------------------------------------------------
+// A music button in the fab row (animated while playing) opens a fullscreen
+// view: now playing on the left, library browser on the right.
 
 const MUSIC_POLL_ACTIVE_MS = 5 * 1000;
 const MUSIC_POLL_IDLE_MS = 30 * 1000;
+const MUSIC_POLL_OPEN_MS = 3 * 1000;
 const MUSIC_VOLUME_STEP = 0.05;
 const MUSIC_DEBOUNCE_MS = 600;
+const MUSIC_VIEW_IDLE_MS = 3 * 60 * 1000;
+const MUSIC_REPEAT_NEXT = { off: 'all', all: 'one', one: 'off' };
+const MUSIC_TYPE_LABELS = { playlist: 'Soittolista', album: 'Albumi', artist: 'Artisti', track: 'Kappale', radio: 'Radio' };
 
-const musicEl = document.getElementById('music');
-const musicArt = document.getElementById('music-art');
-const musicTitle = document.getElementById('music-title');
-const musicArtist = document.getElementById('music-artist');
+const musicBtn = document.getElementById('music-btn');
+const musicOverlay = document.getElementById('music-overlay');
+const musicClose = document.getElementById('music-close');
+const mvNow = document.getElementById('mv-now');
+const mvArt = document.getElementById('mv-art');
+const mvTitle = document.getElementById('mv-title');
+const mvArtist = document.getElementById('mv-artist');
+const mvProgress = document.getElementById('mv-progress');
+const mvProgressFill = document.getElementById('mv-progress-fill');
+const mvElapsed = document.getElementById('mv-elapsed');
+const mvDuration = document.getElementById('mv-duration');
+const mvShuffle = document.getElementById('mv-shuffle');
+const mvRepeat = document.getElementById('mv-repeat');
+const mvNext = document.getElementById('mv-next');
+const mvSpeakers = document.getElementById('mv-speakers');
+const mvTabs = document.getElementById('mv-tabs');
+const mvGrid = document.getElementById('mv-grid');
 const musicVol = document.getElementById('music-vol');
-const presetsTitle = document.getElementById('music-presets-title');
-const presetsGrid = document.getElementById('music-presets');
 
 let music = null;
+let musicReceivedAt = 0;
 let musicArtKey = null;
+let musicSpeakersKey = null;
 let musicPollTimer = null;
 let musicVolDebounce = null;
+let musicTickTimer = null;
+let musicIdleTimer = null;
+let musicLibrary = [];
+let musicLibraryKey = null;
+let musicTab = null;
 
 function isMusicActive(m) {
   return m && (m.state === 'playing' || m.state === 'paused');
 }
 
-function renderMusic(m) {
-  music = m;
-  musicEl.hidden = !isMusicActive(m);
-  if (musicEl.hidden) return;
-  musicEl.classList.toggle('playing', m.state === 'playing');
-  musicTitle.textContent = m.title ?? '';
-  musicArtist.textContent = m.artist ?? '';
-  musicVol.textContent = m.volume == null ? '' : `${Math.round(m.volume * 100)}%`;
-  if (m.artKey !== musicArtKey) {
-    musicArtKey = m.artKey;
-    musicArt.hidden = !m.artKey;
-    if (m.artKey) setApiImage(musicArt, `/api/music/art?k=${m.artKey}`);
+function formatTrackTime(s) {
+  if (s == null || !Number.isFinite(s)) return '';
+  const total = Math.max(0, Math.floor(s));
+  return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, '0')}`;
+}
+
+function musicElapsed() {
+  if (!music || music.elapsed == null) return null;
+  let e = music.elapsed;
+  if (music.state === 'playing') e += (Date.now() - musicReceivedAt) / 1000;
+  return music.duration ? Math.min(e, music.duration) : e;
+}
+
+function renderProgress() {
+  const elapsed = musicElapsed();
+  const duration = isMusicActive(music) ? music.duration : null;
+  mvProgress.classList.toggle('disabled', !duration);
+  mvProgressFill.style.transform = `scaleX(${duration && elapsed != null ? elapsed / duration : 0})`;
+  mvElapsed.textContent = duration ? formatTrackTime(elapsed) : '';
+  mvDuration.textContent = duration ? formatTrackTime(duration) : '';
+}
+
+function renderSpeakers(list) {
+  const key = JSON.stringify(list);
+  if (key === musicSpeakersKey) return;
+  musicSpeakersKey = key;
+  mvSpeakers.innerHTML = '';
+  mvSpeakers.hidden = list.length < 2;
+  for (const s of list) {
+    const b = document.createElement('button');
+    b.className = 'mv-speaker' + (s.active ? ' active' : '');
+    b.textContent = s.name;
+    b.addEventListener('click', () => {
+      if (!s.active) postMusic('/api/music/speaker', { index: s.index });
+    });
+    mvSpeakers.appendChild(b);
   }
+}
+
+function renderNowPlaying() {
+  const m = music;
+  const active = isMusicActive(m);
+  musicOverlay.classList.toggle('playing', m.state === 'playing');
+  mvTitle.textContent = active ? (m.title ?? '') : 'Ei toistoa';
+  mvArtist.textContent = active ? [m.artist, m.album].filter(Boolean).join(' · ') : 'Valitse soitettavaa';
+  mvShuffle.classList.toggle('active', !!m.shuffle);
+  mvRepeat.classList.toggle('active', m.repeat === 'all' || m.repeat === 'one');
+  mvRepeat.classList.toggle('one', m.repeat === 'one');
+  musicVol.textContent = m.volume == null ? '' : `${Math.round(m.volume * 100)}%`;
+  mvNext.textContent = m.next ? `Seuraavaksi: ${[m.next.title, m.next.artist].filter(Boolean).join(' – ')}` : '';
+  const artKey = active ? m.artKey : null;
+  if (artKey !== musicArtKey) {
+    musicArtKey = artKey;
+    mvArt.hidden = !artKey;
+    if (artKey) setApiImage(mvArt, `/api/music/art?k=${artKey}`);
+  }
+  renderSpeakers(m.speakers ?? []);
+  renderProgress();
+}
+
+function renderMusic(m) {
+  // Keep the locally adjusted volume while a volume change is still pending.
+  if (musicVolDebounce && music) m = { ...m, volume: music.volume };
+  music = m;
+  musicReceivedAt = Date.now();
+  musicBtn.hidden = false;
+  musicBtn.classList.toggle('playing', m.state === 'playing');
+  if (!musicOverlay.hidden) renderNowPlaying();
 }
 
 async function pollMusic() {
@@ -989,11 +1066,12 @@ async function pollMusic() {
   } catch (err) {
     // keep last render; retry on next tick
   }
-  musicPollTimer = setTimeout(pollMusic, isMusicActive(music) ? MUSIC_POLL_ACTIVE_MS : MUSIC_POLL_IDLE_MS);
+  const delay = !musicOverlay.hidden ? MUSIC_POLL_OPEN_MS : isMusicActive(music) ? MUSIC_POLL_ACTIVE_MS : MUSIC_POLL_IDLE_MS;
+  musicPollTimer = setTimeout(pollMusic, delay);
 }
 
 async function postMusic(url, body) {
-  musicEl.classList.add('pending');
+  mvNow.classList.add('pending');
   try {
     const res = await apiFetch(url, {
       method: 'POST',
@@ -1005,71 +1083,168 @@ async function postMusic(url, body) {
   } catch (err) {
     return false;
   } finally {
-    musicEl.classList.remove('pending');
+    mvNow.classList.remove('pending');
   }
 }
 
-for (const b of musicEl.querySelectorAll('[data-action]')) {
+for (const b of mvNow.querySelectorAll('[data-action]')) {
   b.addEventListener('click', () => postMusic('/api/music/command', { action: b.dataset.action }));
 }
 
+mvShuffle.addEventListener('click', () => {
+  if (music) postMusic('/api/music/command', { action: 'shuffle', value: !music.shuffle });
+});
+
+mvRepeat.addEventListener('click', () => {
+  if (music) postMusic('/api/music/command', { action: 'repeat', value: MUSIC_REPEAT_NEXT[music.repeat] ?? 'all' });
+});
+
+// Tap anywhere on the progress bar to jump there.
+mvProgress.addEventListener('click', (e) => {
+  if (!music?.duration || !isMusicActive(music)) return;
+  const rect = mvProgress.getBoundingClientRect();
+  const frac = Math.min(1, Math.max(0, (e.clientX - rect.left) / rect.width));
+  const position = frac * music.duration;
+  music = { ...music, elapsed: position };
+  musicReceivedAt = Date.now();
+  renderProgress();
+  postMusic('/api/music/command', { action: 'seek', value: position });
+});
+
 // Volume +/- adjusts locally and sends one request after a pause.
-for (const b of musicEl.querySelectorAll('[data-vol]')) {
+for (const b of mvNow.querySelectorAll('[data-vol]')) {
   b.addEventListener('click', () => {
     if (music?.volume == null) return;
     const next = Math.min(1, Math.max(0, music.volume + Number(b.dataset.vol) * MUSIC_VOLUME_STEP));
-    renderMusic({ ...music, volume: Math.round(next * 100) / 100 });
+    music = { ...music, volume: Math.round(next * 100) / 100 };
+    renderNowPlaying();
     clearTimeout(musicVolDebounce);
-    musicVolDebounce = setTimeout(
-      () => postMusic('/api/music/command', { action: 'volume', value: music.volume }),
-      MUSIC_DEBOUNCE_MS,
-    );
+    musicVolDebounce = setTimeout(() => {
+      musicVolDebounce = null;
+      postMusic('/api/music/command', { action: 'volume', value: music.volume });
+    }, MUSIC_DEBOUNCE_MS);
   });
 }
 
-function renderPresets(list) {
-  presetsGrid.innerHTML = '';
-  presetsTitle.hidden = !list.length;
-  for (const p of list) {
-    const tile = document.createElement('button');
-    tile.className = 'music-preset';
-    tile.innerHTML = `<span class="music-preset-name">${escapeHtml(p.name)}</span>`;
-    if (p.hasImage) {
-      const img = document.createElement('img');
-      img.alt = '';
-      tile.prepend(img);
-      setApiImage(img, `/api/music/presets/${p.index}/image?u=${encodeURIComponent(p.uri)}`);
-    }
-    tile.addEventListener('click', async () => {
-      if (tile.classList.contains('pending')) return;
-      tile.classList.add('pending');
-      const ok = await postMusic('/api/music/play', { uri: p.uri });
-      tile.classList.remove('pending');
-      if (ok) {
-        closeControls();
-        pollMusic();
-      }
-    });
-    presetsGrid.appendChild(tile);
+// Library browser ----------------------------------------------------
+
+// Tile images load only once scrolled near view; the library has hundreds.
+const mvImageObserver = new IntersectionObserver((entries) => {
+  for (const e of entries) {
+    if (!e.isIntersecting) continue;
+    mvImageObserver.unobserve(e.target);
+    setApiImage(e.target, e.target.dataset.src);
   }
+}, { root: mvGrid, rootMargin: '300px' });
+
+function musicTile(item) {
+  // Recently played mixes types, so its tiles say what each one is.
+  const subtitle = item.group === 'recent'
+    ? [MUSIC_TYPE_LABELS[item.mediaType], item.subtitle].filter(Boolean).join(' · ')
+    : item.subtitle;
+  const tile = document.createElement('button');
+  tile.className = 'music-preset';
+  tile.innerHTML = `<span class="music-preset-name">${escapeHtml(item.name)}${
+    subtitle ? `<small>${escapeHtml(subtitle)}</small>` : ''
+  }</span>`;
+  if (item.hasImage) {
+    const img = document.createElement('img');
+    img.alt = '';
+    img.dataset.src = `/api/music/library/${item.index}/image?u=${encodeURIComponent(item.uri)}`;
+    tile.prepend(img);
+    mvImageObserver.observe(img);
+  }
+  tile.addEventListener('click', async () => {
+    if (tile.classList.contains('pending')) return;
+    tile.classList.add('pending');
+    await postMusic('/api/music/play', { uri: item.uri });
+    tile.classList.remove('pending');
+  });
+  return tile;
 }
 
-async function loadPresets() {
+function clearMusicGrid() {
+  mvImageObserver.disconnect();
+  for (const img of mvGrid.querySelectorAll('img')) {
+    if (img.src.startsWith('blob:')) URL.revokeObjectURL(img.src);
+  }
+  mvGrid.innerHTML = '';
+}
+
+function renderMusicGrid() {
+  clearMusicGrid();
+  for (const t of mvTabs.children) t.classList.toggle('active', t.dataset.group === musicTab);
+  const items = musicLibrary.filter((i) => i.group === musicTab);
+  if (items.length) {
+    const grid = document.createElement('div');
+    grid.className = 'mv-tiles';
+    for (const item of items) grid.appendChild(musicTile(item));
+    mvGrid.appendChild(grid);
+  } else {
+    mvGrid.innerHTML = '<div class="mv-empty">Ei kohteita</div>';
+  }
+  mvGrid.scrollTop = 0;
+}
+
+async function loadMusicLibrary() {
   try {
-    const res = await apiFetch('/api/music/presets', { cache: 'no-store' });
+    const res = await apiFetch('/api/music/library', { cache: 'no-store' });
     if (!res.ok) return;
-    const list = await res.json();
-    renderPresets(list);
-    if (list.length) ctrlBtn.hidden = false;
+    const text = await res.text();
+    if (text === musicLibraryKey) return; // unchanged — keep tiles and images
+    musicLibraryKey = text;
+    musicLibrary = JSON.parse(text);
+    const groups = new Set(musicLibrary.map((i) => i.group));
+    for (const t of mvTabs.children) t.hidden = !groups.has(t.dataset.group);
+    if (!groups.has(musicTab)) musicTab = [...mvTabs.children].find((t) => !t.hidden)?.dataset.group ?? null;
+    renderMusicGrid();
   } catch (err) {
-    // silent — no music configured
+    // keep current grid
   }
 }
 
-if (!_needsPassword) {
-  pollMusic();
-  loadPresets();
+for (const t of mvTabs.children) {
+  t.addEventListener('click', () => {
+    if (t.dataset.group === musicTab) return;
+    musicTab = t.dataset.group;
+    renderMusicGrid();
+  });
 }
+
+// Music view ---------------------------------------------------------
+
+// Closes by itself after a while so a forgotten view doesn't hide the photos.
+function resetMusicIdle() {
+  clearTimeout(musicIdleTimer);
+  musicIdleTimer = setTimeout(closeMusic, MUSIC_VIEW_IDLE_MS);
+}
+
+function openMusic() {
+  musicOverlay.hidden = false;
+  if (music) renderNowPlaying();
+  loadMusicLibrary();
+  pollMusic();
+  clearInterval(musicTickTimer);
+  musicTickTimer = setInterval(renderProgress, 1000);
+  resetMusicIdle();
+}
+
+function closeMusic() {
+  musicOverlay.hidden = true;
+  clearInterval(musicTickTimer);
+  clearTimeout(musicIdleTimer);
+  pollMusic();
+}
+
+musicBtn.addEventListener('click', openMusic);
+musicClose.addEventListener('click', closeMusic);
+musicOverlay.addEventListener('pointerdown', resetMusicIdle);
+mvGrid.addEventListener('scroll', resetMusicIdle, { passive: true });
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && !musicOverlay.hidden) closeMusic();
+});
+
+if (!_needsPassword) pollMusic();
 
 // Voice assistant ---------------------------------------------------
 // Tap to talk: records 16 kHz mono audio until a pause in speech, then the

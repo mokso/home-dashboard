@@ -43,7 +43,7 @@ A single Node.js + Fastify process serves both the static frontend and the `/api
 These routes change real state in the house — keep them tightly scoped:
 
 - `POST /api/controls/:index` only acts on entities listed in `CONTROL_N_ENTITY`; climate requests are validated against the entity's `min_temp`/`max_temp`/`hvac_modes`.
-- `POST /api/music/play` only plays URIs that are currently Music Assistant favourites; `POST /api/music/command` only accepts a fixed set of actions on `MUSIC_PLAYER`.
+- `POST /api/music/play` only plays URIs in the library listing the server served (`getLibrary`); `POST /api/music/command` only accepts a fixed set of actions; `POST /api/music/speaker` only switches between `MUSIC_PLAYER`/`MUSIC_SPEAKERS`. The optional Music Assistant API token is used read-only (recently played).
 - `POST /api/voice/ask` (and so the voice assistant) can reach anything HA exposes to Assist — that exposure is managed in HA, not here.
 - Never pass the HA token or HA-signed URLs (e.g. `entity_picture`, which contains an access token) to the frontend.
 
@@ -52,7 +52,7 @@ These routes change real state in the house — keep them tightly scoped:
 These shape every source module:
 
 - A failing upstream must never crash the page or surface a 500 — wrap fetches in try/catch and serve last-known cached value on failure (`ttlCache` in `src/lib/cache.js`).
-- Per-source TTL caches are mandatory (Immich 6h asset list, HA sensors 10s, spot-hinta 30min, calendar 5min, weather 15min, music player 2s, music favourites 10min). The frontend polls `/api/state` every 60s and that must not fan out into fresh upstream calls.
+- Per-source TTL caches are mandatory (Immich 6h asset list, HA sensors 10s, spot-hinta 30min, calendar 5min, weather 15min, music player 2s, music library 10min). The frontend polls `/api/state` every 60s and that must not fan out into fresh upstream calls.
 - The frontend self-reloads daily at 04:00 to shake off any drift from week-long uptime.
 - `/api/health` exposes per-source last-success timestamps (`recordSuccess`/`recordError` in `src/lib/health.js`) for external alerting.
 

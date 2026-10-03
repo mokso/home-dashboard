@@ -31,29 +31,6 @@
 
     <div class="panel panel-electricity" id="electricity"></div>
 
-    <div class="panel panel-music" id="music" hidden>
-      <img class="music-art" id="music-art" alt="" hidden />
-      <div class="music-info">
-        <div class="music-title" id="music-title"></div>
-        <div class="music-artist" id="music-artist"></div>
-      </div>
-      <div class="music-controls">
-      <div class="music-buttons">
-        <button class="music-btn" data-action="previous" aria-label="Edellinen"><svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" fill="currentColor"><path d="M6 5h2v14H6zM20 5v14L9 12z"/></svg></button>
-        <button class="music-btn music-pp" data-action="play_pause" aria-label="Toista/tauko">
-          <svg class="icon-play" viewBox="0 0 24 24" width="26" height="26" aria-hidden="true" fill="currentColor"><path d="M7 4v16l13-8z"/></svg>
-          <svg class="icon-pause" viewBox="0 0 24 24" width="26" height="26" aria-hidden="true" fill="currentColor"><path d="M6 4h4v16H6zM14 4h4v16h-4z"/></svg>
-        </button>
-        <button class="music-btn" data-action="next" aria-label="Seuraava"><svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" fill="currentColor"><path d="M16 5h2v14h-2zM4 5v14l11-7z"/></svg></button>
-      </div>
-      <div class="music-volume">
-        <button class="music-btn" data-vol="-1" aria-label="Hiljemmalle">−</button>
-        <span class="music-vol" id="music-vol"></span>
-        <button class="music-btn" data-vol="1" aria-label="Kovemmalle">+</button>
-      </div>
-      </div>
-    </div>
-
     <div class="caption" id="caption-a"></div>
     <div class="caption" id="caption-b"></div>
 
@@ -70,6 +47,15 @@
         <rect x="1" y="6" width="22" height="12" rx="6"/>
         <circle cx="16" cy="12" r="3"/>
       </svg>
+    </button>
+
+    <button class="fab-btn music-fab" id="music-btn" title="Musiikki" hidden>
+      <svg class="music-fab-note" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M9 18V5l12-2v13"/>
+        <circle cx="6" cy="18" r="3"/>
+        <circle cx="18" cy="16" r="3"/>
+      </svg>
+      <span class="music-fab-eq" aria-hidden="true"><i></i><i></i><i></i></span>
     </button>
 
     <button class="fab-btn voice-btn" id="voice-btn" title="Puheavustaja" hidden>
@@ -89,9 +75,46 @@
       <button class="cam-close" id="ctrl-close" aria-label="Sulje">✕</button>
       <div class="ctrl-scroll">
         <div class="ctrl-grid" id="ctrl-grid"></div>
-        <h2 class="ctrl-section" id="music-presets-title" hidden>Musiikki</h2>
-        <div class="ctrl-grid music-presets" id="music-presets"></div>
       </div>
+    </div>
+
+    <div class="music-overlay" id="music-overlay" hidden>
+      <button class="cam-close" id="music-close" aria-label="Sulje">✕</button>
+      <section class="mv-now" id="mv-now">
+        <div class="mv-art-wrap">
+          <img class="mv-art" id="mv-art" alt="" hidden />
+        </div>
+        <div class="mv-title" id="mv-title"></div>
+        <div class="mv-artist" id="mv-artist"></div>
+        <div class="mv-progress" id="mv-progress"><div class="mv-progress-fill" id="mv-progress-fill"></div></div>
+        <div class="mv-times"><span id="mv-elapsed"></span><span id="mv-duration"></span></div>
+        <div class="mv-buttons">
+          <button class="music-btn mv-toggle" id="mv-shuffle" aria-label="Sekoita"><svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 3h5v5M4 20 21 3M21 16v5h-5M15 15l6 6M4 4l5 5"/></svg></button>
+          <button class="music-btn" data-action="previous" aria-label="Edellinen"><svg viewBox="0 0 24 24" width="26" height="26" aria-hidden="true" fill="currentColor"><path d="M6 5h2v14H6zM20 5v14L9 12z"/></svg></button>
+          <button class="music-btn music-pp" data-action="play_pause" aria-label="Toista/tauko">
+            <svg class="icon-play" viewBox="0 0 24 24" width="32" height="32" aria-hidden="true" fill="currentColor"><path d="M7 4v16l13-8z"/></svg>
+            <svg class="icon-pause" viewBox="0 0 24 24" width="32" height="32" aria-hidden="true" fill="currentColor"><path d="M6 4h4v16H6zM14 4h4v16h-4z"/></svg>
+          </button>
+          <button class="music-btn" data-action="next" aria-label="Seuraava"><svg viewBox="0 0 24 24" width="26" height="26" aria-hidden="true" fill="currentColor"><path d="M16 5h2v14h-2zM4 5v14l11-7z"/></svg></button>
+          <button class="music-btn mv-toggle" id="mv-repeat" aria-label="Toista uudelleen"><svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m17 1 4 4-4 4"/><path d="M3 11V9a4 4 0 0 1 4-4h14M7 23l-4-4 4-4"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg><span class="mv-repeat-one">1</span></button>
+        </div>
+        <div class="music-volume">
+          <button class="music-btn" data-vol="-1" aria-label="Hiljemmalle">−</button>
+          <span class="music-vol" id="music-vol"></span>
+          <button class="music-btn" data-vol="1" aria-label="Kovemmalle">+</button>
+        </div>
+        <div class="mv-next" id="mv-next"></div>
+        <div class="mv-speakers" id="mv-speakers"></div>
+      </section>
+      <section class="mv-browse">
+        <div class="mv-tabs" id="mv-tabs">
+          <button class="mv-tab" data-group="recent">Viimeksi soitetut</button>
+          <button class="mv-tab" data-group="playlist">Soittolistat</button>
+          <button class="mv-tab" data-group="album">Albumit</button>
+          <button class="mv-tab" data-group="artist">Artistit</button>
+        </div>
+        <div class="mv-grid" id="mv-grid"></div>
+      </section>
     </div>
 
     <div class="cam-overlay" id="cam-overlay" hidden>
