@@ -9,6 +9,7 @@ Built as a DAKboard replacement running on a 1st-gen Surface Pro.
 - **Photos** — cycles through Immich photos of selected people, with location/date caption
 - **Clock & date** — top-left, updates every second
 - **Weather** — current conditions + hourly forecast + 2-day outlook (Open-Meteo, no API key needed)
+- **Rain radar** — tap the weather panel for a fullscreen radar map around home, looping the last hour (Finnish Meteorological Institute open data, no API key)
 - **Calendar** — upcoming events from Home Assistant calendar entities
 - **Sensors** — Home Assistant sensor values; click to expand into 12-hour history charts
 - **Electricity prices** — Finnish spot prices (spot-hinta.fi) with color-coded bar chart; click to toggle compact/expanded
@@ -163,6 +164,20 @@ Tap the mic, speak, and recording stops automatically after a short pause (or ta
 
 The voice assistant can do anything your HA exposes to Assist, not just the dashboard's controls. Review **Settings → Voice assistants → Expose** in Home Assistant.
 
+### Rain radar
+
+On by default and centred on `WEATHER_LATITUDE`/`WEATHER_LONGITUDE`. Radar data is the [FMI](https://en.ilmatieteenlaitos.fi/open-data) Finland composite (5-minute steps), so it only covers Finland and its surroundings. Tap the weather panel to open it; tap the map or ▶/❚❚ to pause, tap a step to jump to that frame.
+
+| Variable | Required | Description |
+|---|---|---|
+| `RADAR_ENABLED` | no | `false` hides the radar (default `true`) |
+| `RADAR_ZOOM` | no | Map zoom level 5–12 (default `9`, roughly 190 × 110 km on a 1280 × 720 screen; each step halves/doubles the area) |
+| `RADAR_FRAMES` | no | Number of 5-minute frames in the loop (default `12` = 1 hour, max 36) |
+| `RADAR_BASEMAP_URL` | no | Base map tile URL template with `{z}`/`{x}`/`{y}` (default OpenStreetMap) |
+| `RADAR_BASEMAP_FILTER` | no | CSS filter applied to the base map (default darkens OSM tiles; set empty for an already dark tile set) |
+
+Base map tiles (a fixed 9 × 7 tile grid) are cached in memory for the life of the process, radar frames per timestamp. FMI is polled at most every 2 minutes and only while someone has the radar open.
+
 ## Security
 
 The dashboard started read-only; with controls, music or voice enabled it can change things in your home. It is meant for a trusted LAN:
@@ -174,4 +189,4 @@ The dashboard started read-only; with controls, music or voice enabled it can ch
 
 ## Health check
 
-`GET /api/health` returns uptime and per-source last-success timestamps (including `music` and `voice`), suitable for external monitoring.
+`GET /api/health` returns uptime and per-source last-success timestamps (including `music`, `voice` and `radar`), suitable for external monitoring.

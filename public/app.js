@@ -43,6 +43,7 @@ pwForm.addEventListener('submit', (e) => {
   loadControls();
   pollMusic();
   loadVoice();
+  loadRadar();
 });
 
 // Show prompt if no password stored yet. API calls are deferred until submitted.
@@ -1469,6 +1470,167 @@ voiceBtn.addEventListener('click', () => {
 voiceBubble.addEventListener('click', hideVoiceBubble);
 
 if (!_needsPassword) loadVoice();
+
+// Radar --------------------------------------------------------------
+
+const RADAR_FRAME_MS = 500;
+const RADAR_HOLD_MS = 2000;
+const RADAR_REFRESH_MS = 5 * 60 * 1000;
+
+const radarOverlay = document.getElementById('radar-overlay');
+const radarMap = document.getElementById('radar-map');
+const radarTiles = document.getElementById('radar-tiles');
+const radarFramesEl = document.getElementById('radar-frames');
+const radarHome = document.getElementById('radar-home');
+const radarClose = document.getElementById('radar-close');
+const radarPlayBtn = document.getElementById('radar-play');
+const radarTime = document.getElementById('radar-time');
+const radarSteps = document.getElementById('radar-steps');
+
+let radarGrid = null;
+let radarFrames = []; // [{ time, img }] oldest first
+let radarIndex = 0;
+let radarPlaying = true;
+let radarTimer = null;
+let radarRefreshTimer = null;
+
+async function loadRadar() {
+  try {
+    const res = await apiFetch('/api/radar');
+    // 404 = radar disabled. A 503 still means it exists (FMI just down right
+    // now) — the overlay retries when opened.
+    if (res.status === 404 || res.status === 401) return;
+    weatherEl.classList.add('clickable');
+  } catch (err) {
+    // silent — try again after the daily reload
+  }
+}
+
+function buildRadarMap(grid) {
+  radarGrid = grid;
+  radarMap.style.width = `${grid.width}px`;
+  radarMap.style.height = `${grid.height}px`;
+  radarHome.style.left = `${grid.home.x}px`;
+  radarHome.style.top = `${grid.home.y}px`;
+  radarTiles.style.filter = grid.basemapFilter || '';
+  radarTiles.innerHTML = '';
+  for (let row = 0; row < grid.rows; row++) {
+    for (let col = 0; col < grid.cols; col++) {
+      const img = document.createElement('img');
+      img.alt = '';
+      img.style.left = `${col * grid.tileSize}px`;
+      img.style.top = `${row * grid.tileSize}px`;
+      img.style.width = img.style.height = `${grid.tileSize}px`;
+      setApiImage(img, `/api/radar/tile/${grid.x0 + col}/${grid.y0 + row}`);
+      radarTiles.appendChild(img);
+    }
+  }
+  layoutRadar();
+}
+
+// Keep the home location in the middle of the screen.
+function layoutRadar() {
+  if (!radarGrid) return;
+  radarMap.style.left = `${Math.round(window.innerWidth / 2 - radarGrid.home.x)}px`;
+  radarMap.style.top = `${Math.round(window.innerHeight / 2 - radarGrid.home.y)}px`;
+}
+
+async function refreshRadar() {
+  try {
+    const res = await apiFetch('/api/radar');
+    if (!res.ok) throw new Error(`radar ${res.status}`);
+    const data = await res.json();
+    if (!radarGrid) buildRadarMap(data);
+
+    // Reuse already loaded frames; only new timestamps are fetched.
+    const wasLatest = radarIndex >= radarFrames.length - 1;
+    const old = new Map(radarFrames.map((f) => [f.time, f]));
+    radarFrames = data.frames.map((time) => {
+      if (old.has(time)) {
+        const f = old.get(time);
+        old.delete(time);
+        return f;
+      }
+      const img = document.createElement('img');
+      img.alt = '';
+      setApiImage(img, `/api/radar/frame/${encodeURIComponent(time)}`);
+      return { time, img };
+    });
+    for (const { img } of old.values()) {
+      if (img.src.startsWith('blob:')) URL.revokeObjectURL(img.src);
+    }
+    radarFramesEl.replaceChildren(...radarFrames.map((f) => f.img));
+
+    radarSteps.innerHTML = '';
+    radarFrames.forEach((f, i) => {
+      const step = document.createElement('span');
+      step.addEventListener('click', () => {
+        setRadarPlaying(false);
+        showRadarFrame(i);
+      });
+      radarSteps.appendChild(step);
+    });
+
+    showRadarFrame(wasLatest ? radarFrames.length - 1 : Math.min(radarIndex, radarFrames.length - 1));
+  } catch (err) {
+    if (!radarFrames.length) radarTime.textContent = 'Tutkakuva ei saatavilla';
+  }
+}
+
+function showRadarFrame(i) {
+  if (!radarFrames.length) return;
+  radarIndex = i;
+  radarFrames.forEach((f, j) => f.img.classList.toggle('active', j === i));
+  [...radarSteps.children].forEach((s, j) => s.classList.toggle('active', j === i));
+  const d = new Date(radarFrames[i].time);
+  const ago = Math.max(0, Math.round((Date.now() - d) / 60000));
+  radarTime.textContent = `${timeFmt.format(d)} · ${ago} min sitten`;
+}
+
+function scheduleRadarStep() {
+  clearTimeout(radarTimer);
+  if (!radarPlaying || !radarFrames.length || radarOverlay.hidden) return;
+  const last = radarIndex >= radarFrames.length - 1;
+  radarTimer = setTimeout(() => {
+    showRadarFrame((radarIndex + 1) % radarFrames.length);
+    scheduleRadarStep();
+  }, last ? RADAR_HOLD_MS : RADAR_FRAME_MS);
+}
+
+function setRadarPlaying(on) {
+  radarPlaying = on;
+  radarPlayBtn.textContent = on ? '❚❚' : '▶';
+  scheduleRadarStep();
+}
+
+async function openRadar() {
+  radarOverlay.hidden = false;
+  layoutRadar();
+  await refreshRadar();
+  setRadarPlaying(true);
+  clearInterval(radarRefreshTimer);
+  radarRefreshTimer = setInterval(refreshRadar, RADAR_REFRESH_MS);
+}
+
+function closeRadar() {
+  radarOverlay.hidden = true;
+  clearTimeout(radarTimer);
+  clearInterval(radarRefreshTimer);
+  radarTimer = radarRefreshTimer = null;
+}
+
+weatherEl.addEventListener('click', () => {
+  if (weatherEl.classList.contains('clickable')) openRadar();
+});
+radarMap.addEventListener('click', () => setRadarPlaying(!radarPlaying));
+radarPlayBtn.addEventListener('click', () => setRadarPlaying(!radarPlaying));
+radarClose.addEventListener('click', closeRadar);
+window.addEventListener('resize', layoutRadar);
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && !radarOverlay.hidden) closeRadar();
+});
+
+if (!_needsPassword) loadRadar();
 
 // Daily reload at 04:00 — guards against multi-week JS-state drift.
 (function scheduleDailyReload() {

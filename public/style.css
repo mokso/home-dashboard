@@ -1453,3 +1453,122 @@ body.electricity-compact .panel-sensors:not(.expanded) {
 .voice-heard:empty + .voice-answer {
   margin-top: 0;
 }
+
+.panel-weather.clickable {
+  pointer-events: auto;
+  cursor: pointer;
+}
+
+.radar-overlay {
+  position: fixed;
+  inset: 0;
+  background: #0e0e0e;
+  z-index: 100;
+  overflow: hidden;
+}
+
+.radar-overlay[hidden] {
+  display: none;
+}
+
+.radar-map {
+  position: absolute;
+}
+
+.radar-tiles img,
+.radar-frames img {
+  position: absolute;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+
+.radar-frames img {
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+}
+
+.radar-frames img.active {
+  opacity: 0.8;
+}
+
+.radar-home {
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  margin: -7px 0 0 -7px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 0 0 3px rgba(0, 0, 0, 0.6), 0 0 0 9px rgba(255, 255, 255, 0.25);
+}
+
+.radar-close {
+  z-index: 1;
+  background: rgba(0, 0, 0, 0.5);
+  border-radius: 50%;
+  width: 60px;
+  height: 60px;
+  padding: 0;
+  font-size: 28px;
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.radar-bar {
+  position: absolute;
+  left: 50%;
+  bottom: 32px;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  padding: 10px 22px 10px 10px;
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  border-radius: 999px;
+  color: #fff;
+}
+
+.radar-play {
+  width: 52px;
+  height: 52px;
+  border: none;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.15);
+  color: #fff;
+  font-size: 20px;
+  cursor: pointer;
+}
+
+.radar-time {
+  font-size: 22px;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+  min-width: 190px;
+}
+
+.radar-steps {
+  display: flex;
+  gap: 4px;
+}
+
+.radar-steps span {
+  width: 16px;
+  height: 24px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.2);
+  cursor: pointer;
+}
+
+.radar-steps span.active {
+  background: #fff;
+}
+
+.radar-attrib {
+  position: absolute;
+  right: 10px;
+  bottom: 6px;
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.5);
+}

@@ -127,6 +127,21 @@
       <div class="cam-grid" id="cam-grid"></div>
     </div>
 
+    <div class="radar-overlay" id="radar-overlay" hidden>
+      <div class="radar-map" id="radar-map">
+        <div class="radar-tiles" id="radar-tiles"></div>
+        <div class="radar-frames" id="radar-frames"></div>
+        <div class="radar-home" id="radar-home"></div>
+      </div>
+      <button class="cam-close radar-close" id="radar-close" aria-label="Sulje">✕</button>
+      <div class="radar-bar">
+        <button class="radar-play" id="radar-play" aria-label="Toista / pysäytä">❚❚</button>
+        <div class="radar-time" id="radar-time"></div>
+        <div class="radar-steps" id="radar-steps"></div>
+      </div>
+      <div class="radar-attrib">Tutka © Ilmatieteen laitos · Kartta © OpenStreetMap-tekijät</div>
+    </div>
+
     <button class="refresh-btn" id="refresh" title="Päivitä">
       <svg class="refresh-ring" viewBox="0 0 56 56" aria-hidden="true">
         <circle class="refresh-ring-track" cx="28" cy="28" r="26"></circle>

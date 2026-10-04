@@ -93,6 +93,15 @@ export const config = {
     greenBelow: num('ELEC_GREEN_BELOW', 10),
     redAbove: num('ELEC_RED_ABOVE', 20),
   },
+  radar: {
+    // On by default (uses WEATHER_LATITUDE/LONGITUDE); FMI data covers Finland only.
+    enabled: process.env.RADAR_ENABLED !== 'false',
+    zoom: Math.min(12, Math.max(5, Math.round(num('RADAR_ZOOM', 9)))),
+    frameCount: Math.min(36, Math.max(1, Math.round(num('RADAR_FRAMES', 12)))),
+    basemapUrl: process.env.RADAR_BASEMAP_URL || 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+    // CSS filter for the base map; the default turns light OSM tiles dark.
+    basemapFilter: process.env.RADAR_BASEMAP_FILTER ?? 'invert(1) hue-rotate(180deg) grayscale(0.7) brightness(0.75) contrast(1.1)',
+  },
   sensors: parseSensors(),
   cameras: csv('CAMERA_ENTITIES'),
   controls: parseControls(),
