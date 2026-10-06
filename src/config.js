@@ -123,5 +123,7 @@ export const config = {
     // doesn't understand (like HA's "prefer handling commands locally").
     preferLocal: process.env.VOICE_PREFER_LOCAL !== 'false',
     language: process.env.VOICE_LANGUAGE || 'fi-FI',
+    // GLaDOS look for the mic button and snarky English status texts.
+    glados: process.env.GLADOS_MODE === 'true',
   },
 };

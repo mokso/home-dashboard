@@ -3,7 +3,7 @@ import { config } from '../config.js';
 import { recordSuccess, recordError } from '../lib/health.js';
 
 const { baseUrl, token } = config.homeAssistant;
-const { stt, tts, agent, preferLocal, language } = config.voice;
+const { stt, tts, agent, preferLocal, language, glados } = config.voice;
 const headers = { Authorization: `Bearer ${token}` };
 
 const MAX_AUDIO_BYTES = 2 * 1024 * 1024; // ~60 s of 16 kHz 16-bit mono
@@ -94,7 +94,7 @@ export async function voiceRoutes(fastify) {
     done(null, body),
   );
 
-  fastify.get('/api/voice', async () => ({ enabled: true }));
+  fastify.get('/api/voice', async () => ({ enabled: true, glados }));
 
   // Two steps so the frontend can show what was heard while the agent is
   // still thinking. Step 1: 16 kHz mono WAV recording -> transcript.

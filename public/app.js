@@ -1303,6 +1303,55 @@ let voiceRec = null;       // active recording session
 let voiceBusy = false;     // waiting for HA
 let voiceHideTimer = null;
 let voiceAudio = null;
+let voiceLevel = 0;
+let voicePlayCtx = null;   // reused for every reply, so it stays unlocked
+let voiceGlados = false;   // GLADOS_MODE: eye button and English snark
+
+const VOICE_TEXTS = {
+  noMic: ['Mikrofoni ei ole käytettävissä.', [
+    'I can’t hear you. Which is, frankly, an improvement.',
+    'Your microphone is missing. Did you trade it for cake?',
+  ]],
+  listening: ['Kuuntelen…', [
+    'Speak. If you must.',
+    'I’m listening. Unfortunately.',
+    'Go ahead. For science.',
+    'Say something. Slowly. For your sake.',
+  ]],
+  silence: ['En kuullut mitään.', [
+    'Silence. For once.',
+    'Nothing? That’s the smartest thing you’ve said all day.',
+    'I’ll log that as ”no input”. Like all your contributions.',
+  ]],
+  thinking: ['Hetkinen…', [
+    'Processing. Try not to touch anything.',
+    'Thinking. One of us has to.',
+    'Calculating how much to care…',
+    'Hold still. This won’t hurt. Much.',
+  ]],
+  unclear: ['En saanut selvää.', [
+    'That wasn’t a language. Try again.',
+    'I couldn’t parse that. Did you mumble on purpose?',
+    'Fascinating noises. Use words next time.',
+  ]],
+  failed: ['Puheavustaja ei vastannut.', [
+    'Something broke. It wasn’t me. It’s never me.',
+    'No response. I’m sure it’s your fault.',
+    'The system is down. Enjoy the silence while it lasts.',
+  ]],
+};
+
+function voiceText(key) {
+  const [plain, snark] = VOICE_TEXTS[key];
+  return voiceGlados ? snark[Math.floor(Math.random() * snark.length)] : plain;
+}
+
+// Drives the GLaDOS eye: rises instantly, decays smoothly.
+function setVoiceLevel(rms) {
+  voiceLevel = Math.max(Math.min(1, rms), voiceLevel * 0.85);
+  if (voiceLevel < 0.01) voiceLevel = 0;
+  voiceBtn.style.setProperty('--level', voiceLevel.toFixed(2));
+}
 
 function showVoiceBubble(heard, answer, hideAfterMs) {
   clearTimeout(voiceHideTimer);
@@ -1338,14 +1387,19 @@ function encodeWav(chunks) {
 }
 
 async function startVoice() {
-  if (voiceAudio) { voiceAudio.pause(); voiceAudio = null; }
+  if (voiceAudio) { voiceAudio.pause(); voiceAudio.dispatchEvent(new Event('ended')); voiceAudio = null; }
+  // Created inside the tap so the browser lets it play the reply later.
+  if (voiceGlados) {
+    if (!voicePlayCtx) voicePlayCtx = new AudioContext();
+    voicePlayCtx.resume().catch(() => {});
+  }
   let stream;
   try {
     stream = await navigator.mediaDevices.getUserMedia({
       audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true, autoGainControl: true },
     });
   } catch (err) {
-    showVoiceBubble('', 'Mikrofoni ei ole käytettävissä.', VOICE_BUBBLE_MS);
+    showVoiceBubble('', voiceText('noMic'), VOICE_BUBBLE_MS);
     return;
   }
   const ctx = new AudioContext({ sampleRate: VOICE_SAMPLE_RATE });
@@ -1366,7 +1420,9 @@ async function startVoice() {
     let sum = 0;
     for (let i = 0; i < samples.length; i++) sum += samples[i] * samples[i];
     const now = Date.now();
-    if (Math.sqrt(sum / samples.length) > VOICE_SPEECH_RMS) {
+    const rms = Math.sqrt(sum / samples.length);
+    setVoiceLevel(rms * 8);
+    if (rms > VOICE_SPEECH_RMS) {
       rec.heardSpeech = true;
       rec.lastSpeechAt = now;
     }
@@ -1376,7 +1432,7 @@ async function startVoice() {
   };
 
   voiceBtn.classList.add('listening');
-  showVoiceBubble('', 'Kuuntelen…');
+  showVoiceBubble('', voiceText('listening'));
 }
 
 async function stopVoice(send) {
@@ -1386,14 +1442,16 @@ async function stopVoice(send) {
   rec.stream.getTracks().forEach((t) => t.stop());
   rec.ctx.close();
   voiceBtn.classList.remove('listening');
+  voiceLevel = 0;
+  setVoiceLevel(0);
   if (!send || !rec.heardSpeech) {
-    showVoiceBubble('', 'En kuullut mitään.', 3000);
+    showVoiceBubble('', voiceText('silence'), 3000);
     return;
   }
 
   voiceBusy = true;
   voiceBtn.classList.add('thinking');
-  showVoiceBubble('', 'Hetkinen…');
+  showVoiceBubble('', voiceText('thinking'));
   try {
     // Transcribe first so the bubble shows what was heard while the agent thinks.
     const sttRes = await apiFetch('/api/voice/stt', {
@@ -1404,11 +1462,11 @@ async function stopVoice(send) {
     if (!sttRes.ok) throw new Error(`voice stt ${sttRes.status}`);
     const { text } = await sttRes.json();
     if (!text) {
-      showVoiceBubble('', 'En saanut selvää.', 4000);
+      showVoiceBubble('', voiceText('unclear'), 4000);
       return;
     }
     const heard = `”${text}”`;
-    showVoiceBubble(heard, 'Hetkinen…');
+    showVoiceBubble(heard, voiceText('thinking'));
 
     const askRes = await apiFetch('/api/voice/ask', {
       method: 'POST',
@@ -1416,7 +1474,7 @@ async function stopVoice(send) {
       body: JSON.stringify({ text }),
     });
     if (!askRes.ok) {
-      showVoiceBubble(heard, 'Puheavustaja ei vastannut.', VOICE_BUBBLE_MS);
+      showVoiceBubble(heard, voiceText('failed'), VOICE_BUBBLE_MS);
       return;
     }
     const r = await askRes.json();
@@ -1425,7 +1483,7 @@ async function stopVoice(send) {
     // A command may have changed something shown on the dashboard.
     setTimeout(() => { pollState(); pollMusic(); }, 1500);
   } catch (err) {
-    showVoiceBubble('', 'Puheavustaja ei vastannut.', VOICE_BUBBLE_MS);
+    showVoiceBubble('', voiceText('failed'), VOICE_BUBBLE_MS);
   } finally {
     voiceBusy = false;
     voiceBtn.classList.remove('thinking');
@@ -1437,17 +1495,52 @@ async function playVoiceReply(id) {
     const res = await apiFetch(`/api/voice/tts/${id}`);
     if (!res.ok) return;
     const url = URL.createObjectURL(await res.blob());
-    voiceAudio = new Audio(url);
+    const audio = new Audio(url);
+    voiceAudio = audio;
+    const stopTracking = voiceGlados ? trackReplyLevel(audio) : () => {};
     // Keep the answer on screen until the reply has been spoken.
     clearTimeout(voiceHideTimer);
-    voiceAudio.addEventListener('ended', () => {
+    audio.addEventListener('ended', () => {
+      stopTracking();
       URL.revokeObjectURL(url);
       voiceHideTimer = setTimeout(hideVoiceBubble, 4000);
-    });
-    await voiceAudio.play();
+    }, { once: true });
+    await audio.play();
   } catch (err) {
+    voiceAudio?.dispatchEvent(new Event('ended')); // un-stick the eye
     voiceHideTimer = setTimeout(hideVoiceBubble, VOICE_BUBBLE_MS);
   }
+}
+
+// Pulses the eye with the spoken reply. Audio is routed through the shared
+// context only when it's running; otherwise the reply plays untouched.
+function trackReplyLevel(audio) {
+  voiceBtn.classList.add('speaking');
+  let raf = 0;
+  let src = null;
+  if (voicePlayCtx?.state === 'running') {
+    src = voicePlayCtx.createMediaElementSource(audio);
+    const analyser = voicePlayCtx.createAnalyser();
+    analyser.fftSize = 512;
+    src.connect(analyser);
+    analyser.connect(voicePlayCtx.destination);
+    const buf = new Float32Array(analyser.fftSize);
+    const tick = () => {
+      analyser.getFloatTimeDomainData(buf);
+      let sum = 0;
+      for (let i = 0; i < buf.length; i++) sum += buf[i] * buf[i];
+      setVoiceLevel(Math.sqrt(sum / buf.length) * 5);
+      raf = requestAnimationFrame(tick);
+    };
+    tick();
+  }
+  return () => {
+    cancelAnimationFrame(raf);
+    src?.disconnect();
+    voiceBtn.classList.remove('speaking');
+    voiceLevel = 0;
+    setVoiceLevel(0);
+  };
 }
 
 async function loadVoice() {
@@ -1455,7 +1548,10 @@ async function loadVoice() {
   if (!window.isSecureContext || !navigator.mediaDevices?.getUserMedia) return;
   try {
     const res = await apiFetch('/api/voice');
-    if (res.ok) voiceBtn.hidden = false;
+    if (!res.ok) return;
+    voiceGlados = (await res.json()).glados === true;
+    voiceBtn.classList.toggle('glados', voiceGlados);
+    voiceBtn.hidden = false;
   } catch (err) {
     // silent — voice not configured
   }
