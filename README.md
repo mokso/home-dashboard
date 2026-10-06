@@ -155,7 +155,7 @@ CONTROL_2_LABEL=Downstairs
 | Variable | Required | Description |
 |---|---|---|
 | `VOICE_STT` | no | HA speech-to-text entity, e.g. `stt.home_assistant_cloud`. Leave unset to hide the mic button. |
-| `VOICE_TTS` | no | HA text-to-speech entity for spoken replies; without it replies are text only |
+| `VOICE_TTS` | no | HA text-to-speech entity for spoken replies; without it replies are text only. Works with Piper (`tts.piper`); if the engine rejects `VOICE_LANGUAGE` the engine's default voice is used |
 | `VOICE_AGENT` | no | Conversation agent (default `conversation.home_assistant`), typically an LLM agent such as `conversation.gpt_5_4_mini` that also answers free-form questions. |
 | `VOICE_PREFER_LOCAL` | no | `true` (default): try HA's built-in agent first and only use `VOICE_AGENT` when it doesn't understand the sentence, like HA's "prefer handling commands locally". `false`: always use `VOICE_AGENT`. |
 | `VOICE_LANGUAGE` | no | Speech language (default `fi-FI`) |

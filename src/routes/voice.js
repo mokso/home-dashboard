@@ -68,12 +68,21 @@ async function answer(text) {
   return (await converse(text, agent)).speech?.plain?.speech ?? '';
 }
 
+// Engines spell languages differently (cloud: "fi-FI", Piper: "fi_FI"), and
+// HA answers 500 to a spelling the engine doesn't list. Try each, then fall
+// back to the engine's default voice.
+const ttsLanguages = [...new Set([language, language.replace('-', '_'), null])];
+
 async function textToSpeechPath(message) {
-  const res = await fetch(`${baseUrl}/api/tts_get_url`, {
-    method: 'POST',
-    headers: { ...headers, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ engine_id: tts, message, language }),
-  });
+  let res;
+  for (const lang of ttsLanguages) {
+    res = await fetch(`${baseUrl}/api/tts_get_url`, {
+      method: 'POST',
+      headers: { ...headers, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ engine_id: tts, message, ...(lang ? { language: lang } : {}) }),
+    });
+    if (res.ok) break;
+  }
   if (!res.ok) throw new Error(`HA TTS failed: ${res.status} ${res.statusText}`);
   return (await res.json()).path;
 }
