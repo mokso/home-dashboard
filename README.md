@@ -71,7 +71,7 @@ Setting up the phone:
 - install Chrome 81 (`com.android.chrome` 81.0.4044.138, armeabi-v7a) with `adb install -r`. It installs as an update over the built-in Chrome 40.
 - Android 4.4 doesn't trust Let's Encrypt: install the ISRG Root X1 and X2 certificates under Settings → Security → Install from storage.
 - turn on automatic network time. A wrong clock breaks every HTTPS connection.
-- add the dashboard to the home screen from the Chrome menu so it opens without the address bar.
+- add the dashboard to the home screen from the Chrome menu (*Add to Home screen*). `public/manifest.webmanifest` makes it open fullscreen, without the address bar or status bar.
 
 ## Configuration
 

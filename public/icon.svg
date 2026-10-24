@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <defs>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#24476e"/>
+      <stop offset="1" stop-color="#0b1320"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#ffd166"/>
+      <stop offset="1" stop-color="#f59e0b"/>
+    </radialGradient>
+    <mask id="moon"><rect width="512" height="512" fill="white"/><circle cx="368" cy="118" r="36" fill="black"/></mask>
+  </defs>
+  <rect width="512" height="512" rx="112" fill="url(#sky)"/>
+  <circle cx="388" cy="132" r="40" fill="#ffd166" mask="url(#moon)"/>
+  <path d="M256 116 L436 270 H392 V412 H120 V270 H76 Z" fill="#eef2f7" stroke="#eef2f7" stroke-width="12" stroke-linejoin="round"/>
+  <rect x="206" y="282" width="100" height="100" rx="12" fill="url(#glow)"/>
+  <path d="M256 282 V382 M206 332 H306" stroke="#c2410c" stroke-width="8"/>
+</svg>
