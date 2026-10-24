@@ -1284,7 +1284,10 @@ if (!_needsPassword) pollMusic();
 // backend runs it through HA speech-to-text, the conversation agent and TTS.
 
 const VOICE_SAMPLE_RATE = 16000;
-const VOICE_SPEECH_RMS = 0.02;       // level counted as speech
+const VOICE_SPEECH_RMS = narrowScreen ? 0.004 : 0.02; // lowest level counted as speech; the UVP mic can peak at only 0.005–0.01
+const VOICE_SPEECH_RMS_MAX = 0.05;   // cap, in case someone talks during noise calibration
+const VOICE_NOISE_MS = 300;          // room noise is measured this long after the tap
+const VOICE_NOISE_FACTOR = 4;        // speech must be this many times louder than the room
 const VOICE_END_SILENCE_MS = 1200;   // pause that ends the recording
 const VOICE_NO_SPEECH_MS = 6000;     // give up if nothing is said
 const VOICE_MAX_MS = 12000;
@@ -1382,10 +1385,14 @@ function encodeWav(chunks) {
   v.setUint32(24, VOICE_SAMPLE_RATE, true); v.setUint32(28, VOICE_SAMPLE_RATE * 2, true);
   v.setUint16(32, 2, true); v.setUint16(34, 16, true);
   str(36, 'data'); v.setUint32(40, length * 2, true);
+  // Normalize so quiet mics (the UVP phone) still reach STT at a usable level.
+  let peak = 0;
+  for (const c of chunks) for (let i = 0; i < c.length; i++) peak = Math.max(peak, Math.abs(c[i]));
+  const gain = peak > 0 ? Math.min(30, 0.9 / peak) : 1;
   let o = 44;
   for (const c of chunks) {
     for (let i = 0; i < c.length; i++, o += 2) {
-      const s = Math.max(-1, Math.min(1, c[i]));
+      const s = Math.max(-1, Math.min(1, c[i] * gain));
       v.setInt16(o, s < 0 ? s * 0x8000 : s * 0x7fff, true);
     }
   }
@@ -1418,7 +1425,7 @@ async function startVoice() {
   node.connect(ctx.destination); // keeps the node pulled; it outputs silence
 
   const startedAt = Date.now();
-  const rec = { stream, ctx, chunks: [], heardSpeech: false, lastSpeechAt: 0 };
+  const rec = { stream, ctx, chunks: [], heardSpeech: false, lastSpeechAt: 0, noiseSum: 0, noiseBlocks: 0 };
   voiceRec = rec;
   node.port.onmessage = (e) => {
     const samples = e.data;
@@ -1428,7 +1435,14 @@ async function startVoice() {
     const now = Date.now();
     const rms = Math.sqrt(sum / samples.length);
     setVoiceLevel(rms * 8);
-    if (rms > VOICE_SPEECH_RMS) {
+    if (now - startedAt < VOICE_NOISE_MS) {
+      rec.noiseSum += rms;
+      rec.noiseBlocks++;
+      return;
+    }
+    const noise = rec.noiseBlocks ? rec.noiseSum / rec.noiseBlocks : 0;
+    const speechRms = Math.min(VOICE_SPEECH_RMS_MAX, Math.max(VOICE_SPEECH_RMS, noise * VOICE_NOISE_FACTOR));
+    if (rms > speechRms) {
       rec.heardSpeech = true;
       rec.lastSpeechAt = now;
     }
