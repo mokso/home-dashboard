@@ -12,6 +12,8 @@ A self-hosted DAKboard replacement: a single fullscreen web page running in a ki
 
 It is **no longer read-only**: controls, music and voice can change things in the house through Home Assistant. See "Write paths" below.
 
+A second display runs the same page: a UniFi UVP desk phone (Android 4.4, **Chrome 81**, 640×960, ~720 MB RAM). It gets a stacked layout from the `@media (max-width: 700px)` block at the end of `style.css`, and `narrowScreen` in `app.js` skips loading photos, cameras and music there. See README "Small screens".
+
 ## Architecture in one sentence
 
 A single Node.js + Fastify process serves both the static frontend and the `/api/*` routes that proxy and cache all upstream APIs server-side. The frontend never talks to Immich/HA/Spotify-CDN or anything else directly — that's deliberate (CORS, secrets, rate limits, image auth headers). Images and audio from HA are proxied through the backend too.
@@ -20,6 +22,7 @@ A single Node.js + Fastify process serves both the static frontend and the `/api
 
 - **Backend:** Node.js 20 + Fastify, plain JS (ES modules). No dependencies beyond `fastify` and `@fastify/static` — use global `fetch`, avoid adding packages (e.g. voice uses HA's REST STT/conversation/TTS endpoints rather than the websocket pipeline to avoid a `ws` dependency on Node 20).
 - **Frontend:** Vanilla HTML/CSS/JS in `public/`. **No framework, no build step, no bundler, no state library.** This page must survive years of uptime on a low-power device.
+- **Browser floor: Chrome 81** (the UVP phone). Don't use CSS or JS newer than that: no `inset` shorthand (use `top`/`right`/`bottom`/`left`), no reliance on flexbox `gap`, no `aspect-ratio` outside the music view, no `replaceAll`/`.at()`/`??=`/`||=`/`structuredClone`. When adding a feature, check how it looks under 700 px width too.
 - **Deploy:** Single Docker container (`node:20-alpine`), image built to GHCR on push to `main`.
 - **UI language:** Finnish (`fi-FI`) for all user-facing strings.
 

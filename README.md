@@ -55,6 +55,24 @@ docker compose up -d
 
 The voice assistant needs the dashboard to be served over **HTTPS** (browsers only allow microphone access on secure origins). Put it behind a reverse proxy such as Nginx Proxy Manager or Caddy; the mic button stays hidden on plain HTTP.
 
+## Small screens (UniFi UVP desk phone)
+
+The same page also runs on a second display: an old UniFi UVP desk phone (Android 4.4, 640×960 portrait, ~720 MB RAM) with Chrome 81 sideloaded over adb. Below 700 px width (`@media (max-width: 700px)` at the end of `style.css`):
+
+- panels stack in one scrolling column: clock + weather side by side, then electricity, sensors and calendar
+- photos, captions and the refresh button are hidden, and `app.js` skips loading photos, cameras and music altogether (`narrowScreen`) to save memory
+- the camera and music buttons are hidden; controls open as a two-column overlay, climate tiles full width
+- expanded sensors open as a fullscreen one-column overlay
+
+**Browser compatibility:** Chrome 81 is the newest Chrome for Android 4.4, so the CSS and JS must keep working there. In particular, don't use the `inset` shorthand (Chrome 87+): write `top`/`right`/`bottom`/`left` instead. Flexbox `gap` (Chrome 84+) is ignored there, so layouts must not depend on it. `aspect-ratio` (Chrome 88+) is only used in the music view, which is hidden on the phone.
+
+Setting up the phone:
+
+- install Chrome 81 (`com.android.chrome` 81.0.4044.138, armeabi-v7a) with `adb install -r`. It installs as an update over the built-in Chrome 40.
+- Android 4.4 doesn't trust Let's Encrypt: install the ISRG Root X1 and X2 certificates under Settings → Security → Install from storage.
+- turn on automatic network time. A wrong clock breaks every HTTPS connection.
+- add the dashboard to the home screen from the Chrome menu so it opens without the address bar.
+
 ## Configuration
 
 Copy `.env.example` to `.env` and set the values below.

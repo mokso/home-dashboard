@@ -18,6 +18,11 @@ export async function photoRoutes(fastify) {
 
   fastify.get('/api/photo/asset/:id', async (req, reply) => {
     const { id } = req.params;
+    // The id goes into an Immich URL, so only plain UUIDs may pass (no "../").
+    if (!/^[0-9a-f-]{36}$/i.test(id)) {
+      reply.code(400);
+      return { error: 'bad id' };
+    }
     try {
       const { contentType, body } = await getThumbnail(id);
       recordSuccess('photo');

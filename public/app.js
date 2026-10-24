@@ -599,7 +599,11 @@ function schedulePhoto() {
   photoTimer = setTimeout(triggerPhoto, PHOTO_INTERVAL_MS);
 }
 
+// Narrow screens (UVP desk phone) hide photos, cameras and music; skip their downloads too.
+const narrowScreen = matchMedia('(max-width: 700px)').matches;
+
 function triggerPhoto() {
+  if (narrowScreen) return;
   lastPhotoAt = Date.now();
   loadNext();
   schedulePhoto();
@@ -652,6 +656,7 @@ function toggleCameraFocus(index) {
 }
 
 async function loadCameraList() {
+  if (narrowScreen) return;
   try {
     const res = await apiFetch('/api/cameras');
     if (res.status === 401) { localStorage.removeItem(PW_KEY); showPasswordPrompt(); return; }
@@ -1084,6 +1089,7 @@ function renderMusic(m) {
 }
 
 async function pollMusic() {
+  if (narrowScreen) return;
   clearTimeout(musicPollTimer);
   try {
     const res = await apiFetch('/api/music', { cache: 'no-store' });
