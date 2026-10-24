@@ -55,7 +55,7 @@ These routes change real state in the house — keep them tightly scoped:
 These shape every source module:
 
 - A failing upstream must never crash the page or surface a 500 — wrap fetches in try/catch and serve last-known cached value on failure (`ttlCache` in `src/lib/cache.js`).
-- Per-source TTL caches are mandatory (Immich 6h asset list, HA sensors 10s, spot-hinta 30min, calendar 5min, weather 15min, music player 2s, music library 10min, radar frame list 2min). The frontend polls `/api/state` every 60s and that must not fan out into fresh upstream calls.
+- Per-source TTL caches are mandatory (Immich 6h asset list, HA sensors 10s, spot-hinta 30min, calendar 5min, weather 15min, music player 2s, music library 10min, radar frame list 2min, doorbell state 1s). The frontend polls `/api/state` every 60s and that must not fan out into fresh upstream calls.
 - The frontend self-reloads daily at 04:00 to shake off any drift from week-long uptime.
 - `/api/health` exposes per-source last-success timestamps (`recordSuccess`/`recordError` in `src/lib/health.js`) for external alerting.
 

@@ -96,6 +96,8 @@ Copy `.env.example` to `.env` and set the values below.
 | `ELEC_GREEN_BELOW` | no | Price threshold for green (default 10 c/kWh) |
 | `ELEC_RED_ABOVE` | no | Price threshold for red (default 20 c/kWh) |
 | `CAMERA_ENTITIES` | no | Comma-separated HA camera entity IDs; camera button hidden if unset |
+| `DOORBELL_ENTITY` | no | HA `binary_sensor` of the doorbell button. When it turns on, every open dashboard (also the UVP phone) opens `DOORBELL_CAMERA` fullscreen for 20 s; with Fully Kiosk's *JavaScript Interface* enabled it also wakes the screen. Pages poll `/api/doorbell` every 2 s |
+| `DOORBELL_CAMERA` | no | The doorbell camera, one of `CAMERA_ENTITIES` |
 
 ### Sensors
 

@@ -1785,7 +1785,8 @@ body.electricity-compact .panel-sensors:not(.expanded) {
     right: 4px;
   }
 
-  .ctrl-overlay {
+  .ctrl-overlay,
+  .cam-overlay {
     background: #000;
   }
 

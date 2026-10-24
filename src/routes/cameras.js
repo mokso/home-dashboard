@@ -1,4 +1,5 @@
 import { config } from '../config.js';
+import { ttlCache } from '../lib/cache.js';
 
 const { baseUrl, token } = config.homeAssistant;
 
@@ -41,6 +42,30 @@ export async function cameraRoutes(fastify) {
       fastify.log.error({ err }, `camera snapshot failed: ${entity}`);
       reply.code(503);
       return { error: 'camera unavailable' };
+    }
+  });
+
+  const { entity: doorbell, camera: doorbellCamera } = config.doorbell;
+  if (!doorbell) return;
+
+  // Every open page polls this every 2 s; the short cache keeps HA at one request per second.
+  const doorbellState = ttlCache(async () => {
+    const res = await fetch(
+      `${baseUrl}/api/states/${encodeURIComponent(doorbell)}`,
+      { headers: { Authorization: `Bearer ${token}` } },
+    );
+    if (!res.ok) throw new Error(`HA doorbell ${doorbell} failed: ${res.status}`);
+    const s = await res.json();
+    return { state: s.state, lastChanged: s.last_changed, camera: cameras.indexOf(doorbellCamera) };
+  }, 1000);
+
+  fastify.get('/api/doorbell', async (req, reply) => {
+    try {
+      return await doorbellState();
+    } catch (err) {
+      fastify.log.error({ err }, 'doorbell state failed');
+      reply.code(503);
+      return { error: 'doorbell unavailable' };
     }
   });
 }

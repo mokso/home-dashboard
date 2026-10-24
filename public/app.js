@@ -655,8 +655,8 @@ function toggleCameraFocus(index) {
   }
 }
 
-async function loadCameraList() {
-  if (narrowScreen) return;
+async function loadCameraList(force) {
+  if (narrowScreen && !force) return;
   try {
     const res = await apiFetch('/api/cameras');
     if (res.status === 401) { localStorage.removeItem(PW_KEY); showPasswordPrompt(); return; }
@@ -690,6 +690,7 @@ function refreshCameraSnapshots() {
   const t = Date.now();
   const pw = getPassword();
   for (const { img, index } of camImgs) {
+    if (focusedCamIndex !== null && index !== focusedCamIndex) continue; // hidden tile
     if (pw) {
       apiFetch(`/api/cameras/${index}/snapshot?t=${t}`, { cache: 'no-store' })
         .then((r) => r.ok ? r.blob() : null)
@@ -708,6 +709,7 @@ function openCameras() {
 }
 
 function closeCameras() {
+  clearTimeout(doorbellCloseTimer);
   camOverlay.hidden = true;
   clearInterval(camPollTimer);
   camPollTimer = null;
@@ -721,6 +723,45 @@ camClose.addEventListener('click', closeCameras);
 document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape' && !camOverlay.hidden) closeCameras();
 });
+
+// Doorbell -----------------------------------------------------------
+// A press opens the doorbell camera fullscreen for a while, also on the UVP where cameras are hidden.
+
+const DOORBELL_POLL_MS = 2000;
+const DOORBELL_SHOW_MS = 20 * 1000;
+let doorbellSeen = null; // { state, lastChanged } from the previous poll
+let doorbellCloseTimer = null;
+
+async function pollDoorbell() {
+  try {
+    const res = await apiFetch('/api/doorbell');
+    if (res.status === 404) return; // not configured: stop polling
+    if (res.ok) {
+      const d = await res.json();
+      // A short press can start and end between polls, so off -> off with a new timestamp counts too.
+      const pressed = doorbellSeen && d.lastChanged !== doorbellSeen.lastChanged
+        && (d.state === 'on' || (d.state === 'off' && doorbellSeen.state === 'off'));
+      doorbellSeen = d;
+      if (pressed) showDoorbell(d.camera);
+    }
+  } catch (err) {
+    // keep polling
+  }
+  setTimeout(pollDoorbell, DOORBELL_POLL_MS);
+}
+
+async function showDoorbell(cameraIndex) {
+  if (window.fully) fully.turnScreenOn(); // Fully Kiosk's JavaScript interface, when enabled
+  if (!camImgs.length) await loadCameraList(true);
+  if (!camImgs.length) return;
+  if (camOverlay.hidden) openCameras();
+  if (cameraIndex >= 0 && focusedCamIndex !== cameraIndex) toggleCameraFocus(cameraIndex);
+  refreshCameraSnapshots();
+  clearTimeout(doorbellCloseTimer);
+  doorbellCloseTimer = setTimeout(closeCameras, DOORBELL_SHOW_MS);
+}
+
+if (!_needsPassword) pollDoorbell();
 
 // Controls -----------------------------------------------------------
 

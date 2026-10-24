@@ -104,6 +104,11 @@ export const config = {
   },
   sensors: parseSensors(),
   cameras: csv('CAMERA_ENTITIES'),
+  // When this binary_sensor turns on, the page opens DOORBELL_CAMERA (one of CAMERA_ENTITIES) fullscreen.
+  doorbell: {
+    entity: process.env.DOORBELL_ENTITY || null,
+    camera: process.env.DOORBELL_CAMERA || null,
+  },
   controls: parseControls(),
   music: {
     player: process.env.MUSIC_PLAYER || null,
