@@ -8,7 +8,7 @@ Built and running in production. `dashboard-plan.md` is the original plan and st
 
 ## What this is
 
-A self-hosted DAKboard replacement: a single fullscreen web page running in a kiosk browser on a wall-mounted 1st-gen Surface Pro. Aggregates Immich photos, Home Assistant sensors, spot-hinta.fi electricity prices, calendar events (via HA calendar entities) and Open-Meteo weather. LAN-only, runs forever, served over HTTPS through the user's Nginx Proxy Manager.
+A self-hosted DAKboard replacement: a single fullscreen web page running in Fully Kiosk Browser (Pro) on a wall-mounted Samsung Galaxy Tab S6 Lite (it replaced a 1st-gen Surface Pro). Aggregates Immich photos, Home Assistant sensors, spot-hinta.fi electricity prices, calendar events (via HA calendar entities) and Open-Meteo weather. LAN-only, runs forever, served over HTTPS through the user's Nginx Proxy Manager.
 
 It is **no longer read-only**: controls, music and voice can change things in the house through Home Assistant. See "Write paths" below.
 
@@ -16,7 +16,7 @@ A second display runs the same page: a UniFi UVP desk phone (Android 4.4, **Chro
 
 ## Architecture in one sentence
 
-A single Node.js + Fastify process serves both the static frontend and the `/api/*` routes that proxy and cache all upstream APIs server-side. The frontend never talks to Immich/HA/Spotify-CDN or anything else directly — that's deliberate (CORS, secrets, rate limits, image auth headers). Images and audio from HA are proxied through the backend too.
+A single Node.js + Fastify process serves both the static frontend and the `/api/*` routes that proxy and cache all upstream APIs server-side. The frontend never talks to Immich/HA/Spotify-CDN or anything else directly — that's deliberate (CORS, secrets, rate limits, image auth headers). Images and audio from HA are proxied through the backend too. One exception: the phone (Enreach Voice web phone) is loaded from phone.enreachvoice.com and talks to Enreach directly, because the WebRTC call runs in the browser.
 
 ## Stack decisions (already made — don't relitigate)
 

@@ -2,7 +2,7 @@
 
 A self-hosted fullscreen dashboard for a wall-mounted kiosk display. Aggregates family photos from Immich, Home Assistant sensors, electricity spot prices, Google Calendar events, and weather on a single always-on page. It works as a glanceable display with no interaction needed, and optionally adds touch controls, music playback and a voice assistant through Home Assistant.
 
-Built as a DAKboard replacement running on a 1st-gen Surface Pro.
+Built as a DAKboard replacement running on a Samsung Galaxy Tab S6 Lite in Fully Kiosk Browser (Pro).
 
 ## Features
 
@@ -16,6 +16,7 @@ Built as a DAKboard replacement running on a 1st-gen Surface Pro.
 - **Cameras** — button opens a 2×2 live view of Frigate (or any HA) cameras; tap a tile to go fullscreen, tap again to return to the grid
 - **Controls** — button opens a tile overlay of Home Assistant toggles (switches, lights, input booleans) and climate tiles (target temperature −/+ and heat/cool/auto/off modes)
 - **Music** — a music button (animated while playing) opens a fullscreen music view: cover art, progress bar with seek, play/pause/skip, shuffle/repeat, volume, next track and speaker picker, plus the Music Assistant library (recently played, playlists, albums, artists) to start something new
+- **Phone** — Enreach Voice web phone running headless in the page: incoming calls open a fullscreen answer/reject view, the phone button opens speed dials and a keypad. Log in from the settings (gear) button
 - **Voice assistant** — tap-to-talk mic button that runs speech through Home Assistant Assist (speech-to-text → conversation agent → spoken reply)
 
 ## Stack
@@ -98,6 +99,9 @@ Copy `.env.example` to `.env` and set the values below.
 | `CAMERA_ENTITIES` | no | Comma-separated HA camera entity IDs; camera button hidden if unset |
 | `DOORBELL_ENTITY` | no | HA `binary_sensor` of the doorbell button. When it turns on, every open dashboard (also the UVP phone) opens `DOORBELL_CAMERA` fullscreen for 20 s; with Fully Kiosk's *JavaScript Interface* enabled it also wakes the screen. Pages poll `/api/doorbell` every 2 s |
 | `DOORBELL_CAMERA` | no | The doorbell camera, one of `CAMERA_ENTITIES` |
+| `PHONE_CONTACTS` | no | Speed dials for the phone, `Name=number` comma-separated (e.g. `Äiti=+358401234567,Isä=+358501234567`). The phone works without them (keypad only) |
+
+The phone is the [Enreach Voice web phone](https://phone.enreachvoice.com/docs/) (version pinned in `ENREACH_PHONE_JS` in `app.js`), loaded straight from Enreach by the browser — the one exception to "the frontend only talks to the backend", since the WebRTC call runs between the browser and Enreach. Log in from the gear button with your Enreach username and password: the browser trades them for the user's API SecretKey (service discovery + `POST /authuser`) and stores only the username, user ID and SecretKey in its `localStorage`. The phone logs in again on every page load with Basic auth. Incoming numbers that aren't in `PHONE_CONTACTS` are looked up from the Finnish public number directory through Enreach (`POST /users/me/features/public-directory/resolve/`); this needs the `PublicDirectoryLookup_Enabled` setting on the Enreach user, otherwise the bare number is shown. The phone needs the page over HTTPS (browsers hide the microphone API on plain `http://`, except on `localhost`). It isn't loaded on screens under 700 px (the UVP is a phone already). In Fully Kiosk enable microphone access, autoplay (for the ringtone) and the JavaScript Interface (wakes the screen on an incoming call).
 
 ### Sensors
 
@@ -206,6 +210,7 @@ The dashboard started read-only; with controls, music or voice enabled it can ch
 - Set `DASHBOARD_PASSWORD` — it protects every `/api/*` route, including the ones that switch devices.
 - Controls are allowlisted: only entities in `CONTROL_N_ENTITY` can be switched, and climate requests are validated against the device's own limits and modes.
 - Music only plays items from the library listing the server itself served, only on speakers listed in `MUSIC_PLAYER`/`MUSIC_SPEAKERS`, and commands are a fixed set (play/pause, skip, volume, seek, shuffle, repeat).
+- The phone's Enreach SecretKey is stored in plain text in the kiosk browser's `localStorage`. It gives the same API access as the password, so anyone with access to the tablet's browser can use it.
 - Don't expose the dashboard to the internet.
 
 ## Health check

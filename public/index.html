@@ -61,12 +61,25 @@
       <span class="music-fab-eq" aria-hidden="true"><i></i><i></i><i></i></span>
     </button>
 
+    <button class="fab-btn" id="phone-btn" title="Puhelin" hidden>
+      <svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/>
+      </svg>
+    </button>
+
     <button class="fab-btn voice-btn" id="voice-btn" title="Puheavustaja" hidden>
       <svg class="voice-mic" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
         <rect x="9" y="2" width="6" height="12" rx="3"/>
         <path d="M5 11a7 7 0 0 0 14 0M12 18v4"/>
       </svg>
       <span class="glados-eye" aria-hidden="true"><span class="glados-ring"></span><span class="glados-iris"></span></span>
+    </button>
+
+    <button class="fab-btn" id="settings-btn" title="Asetukset" hidden>
+      <svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="3"/>
+        <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+      </svg>
     </button>
     </div>
 
@@ -153,6 +166,51 @@
       </svg>
       <span class="refresh-icon">↻</span>
     </button>
+
+    <div class="phone-overlay" id="phone-overlay" hidden>
+      <button class="cam-close" id="phone-close" aria-label="Sulje">✕</button>
+      <div class="phone-body">
+        <div class="phone-contacts" id="phone-contacts"></div>
+        <div class="phone-pad">
+          <div class="phone-number" id="phone-number"></div>
+          <div class="phone-keys" id="phone-keys"></div>
+          <div class="phone-actions">
+            <button class="call-btn answer" id="phone-call" aria-label="Soita">
+              <svg viewBox="0 0 24 24" width="28" height="28" aria-hidden="true" fill="currentColor"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
+            </button>
+            <button class="phone-key phone-back" id="phone-back" aria-label="Poista">⌫</button>
+          </div>
+          <div class="phone-status" id="phone-status"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="call-overlay" id="call-overlay" hidden>
+      <div class="call-name" id="call-name"></div>
+      <div class="call-number" id="call-number"></div>
+      <div class="call-status" id="call-status"></div>
+      <div class="call-buttons">
+        <button class="call-btn reject" id="call-reject" aria-label="Hylkää">✕</button>
+        <button class="call-btn answer" id="call-answer" aria-label="Vastaa">
+          <svg viewBox="0 0 24 24" width="28" height="28" aria-hidden="true" fill="currentColor"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
+        </button>
+        <button class="call-btn reject" id="call-end" aria-label="Lopeta puhelu">✕</button>
+      </div>
+    </div>
+
+    <div class="pw-overlay" id="settings-overlay" hidden>
+      <form class="pw-box" id="settings-form">
+        <div class="pw-label">Puhelin (Enreach Voice)</div>
+        <input class="pw-input settings-input" id="settings-user" type="email" placeholder="Käyttäjätunnus" autocomplete="username" />
+        <input class="pw-input settings-input" id="settings-pass" type="password" placeholder="Salasana" autocomplete="current-password" />
+        <div class="phone-status" id="settings-status"></div>
+        <div class="settings-actions">
+          <button class="pw-btn" type="button" id="settings-clear">Poista</button>
+          <button class="pw-btn" type="button" id="settings-cancel">Peruuta</button>
+          <button class="pw-btn" type="submit">Tallenna</button>
+        </div>
+      </form>
+    </div>
 
     <div class="pw-overlay" id="pw-overlay" hidden>
       <form class="pw-box" id="pw-form">

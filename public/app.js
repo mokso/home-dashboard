@@ -1789,6 +1789,278 @@ document.addEventListener('keydown', (e) => {
 
 if (!_needsPassword) loadRadar();
 
+// Phone --------------------------------------------------------------
+// Enreach Voice web phone, kept headless: its JS API is driven from our own
+// keypad and call view. It logs out on every page load, so it logs in again
+// with Basic auth (username + Enreach API SecretKey). The settings button
+// trades the password for the SecretKey once; the password isn't stored.
+
+const ENREACH_PHONE_JS = 'https://phone.enreachvoice.com/2026.13.0/webrtc-client-ui.min.js';
+const ENREACH_DISCOVERY = 'https://discover.enreachvoice.com/api/user?user=';
+const PHONE_AUTH_EXPIRES_S = 24 * 60 * 60; // Basic auth doesn't expire; the header is re-set on auth-token-expired
+const PHONE_USER_KEY = 'dashboard.phoneUser';
+const PHONE_USERID_KEY = 'dashboard.phoneUserId';
+const PHONE_SECRET_KEY = 'dashboard.phoneSecret';
+
+const phoneBtn = document.getElementById('phone-btn');
+const phoneOverlay = document.getElementById('phone-overlay');
+const phoneContactsEl = document.getElementById('phone-contacts');
+const phoneNumberEl = document.getElementById('phone-number');
+const phoneKeysEl = document.getElementById('phone-keys');
+const phoneStatusEl = document.getElementById('phone-status');
+const callOverlay = document.getElementById('call-overlay');
+const callNameEl = document.getElementById('call-name');
+const callNumberEl = document.getElementById('call-number');
+const callStatusEl = document.getElementById('call-status');
+const callAnswerBtn = document.getElementById('call-answer');
+const callRejectBtn = document.getElementById('call-reject');
+const callEndBtn = document.getElementById('call-end');
+const settingsBtn = document.getElementById('settings-btn');
+const settingsOverlay = document.getElementById('settings-overlay');
+const settingsUser = document.getElementById('settings-user');
+const settingsPass = document.getElementById('settings-pass');
+const settingsStatusEl = document.getElementById('settings-status');
+
+let phoneEl = null;
+let phoneContacts = [];
+let phoneDialed = '';
+let currentCallId = null; // shortcut: one call at a time; a second incoming call replaces the view
+let phoneReloadTimer = null;
+
+function setPhoneStatus(text) {
+  phoneStatusEl.textContent = text;
+  settingsStatusEl.textContent = text;
+}
+
+// Compare the last 9 digits so +35840… and 040… match.
+function contactName(number) {
+  const tail = (s) => String(s || '').replace(/\D/g, '').slice(-9);
+  const c = phoneContacts.find((c) => tail(c.number) === tail(number));
+  return c ? c.name : null;
+}
+
+// The phone needs a fresh login after a lost connection; a reload does that.
+function reloadPhoneSoon() {
+  if (phoneReloadTimer) return;
+  setPhoneStatus('Yhteys katkesi, käynnistetään uudelleen…');
+  phoneReloadTimer = setTimeout(() => location.reload(), 30 * 1000);
+}
+
+async function loadPhoneContacts() {
+  try {
+    const res = await apiFetch('/api/phone/contacts');
+    if (!res.ok) return; // 404: no speed dials configured
+    phoneContacts = await res.json();
+    phoneContactsEl.innerHTML = '';
+    for (const c of phoneContacts) {
+      const btn = document.createElement('button');
+      btn.className = 'phone-contact';
+      const name = document.createElement('div');
+      name.className = 'phone-contact-name';
+      name.textContent = c.name;
+      const number = document.createElement('div');
+      number.className = 'phone-contact-number';
+      number.textContent = c.number;
+      btn.appendChild(name);
+      btn.appendChild(number);
+      btn.addEventListener('click', () => dial(c.number));
+      phoneContactsEl.appendChild(btn);
+    }
+  } catch (err) {
+    // silent — keypad still works
+  }
+}
+
+// Password login against the user's own API silo; returns what the phone's AuthHeader login needs.
+async function fetchPhoneKey(user, pass) {
+  const disc = await fetch(ENREACH_DISCOVERY + encodeURIComponent(user));
+  if (!disc.ok) throw new Error('Käyttäjätunnusta ei löydy');
+  const endpoints = await disc.json(); // shortcut: uses the first silo; a user in several silos would need a picker
+  const res = await fetch(endpoints[0].apiEndpoint.replace(/\/?$/, '/') + 'authuser', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+    body: JSON.stringify({ UserName: user, Password: pass }),
+  });
+  if (!res.ok) throw new Error('Väärä käyttäjätunnus tai salasana');
+  const a = await res.json();
+  return { userId: a.UserID, secretKey: a.SecretKey };
+}
+
+function startPhone() {
+  const user = localStorage.getItem(PHONE_USER_KEY);
+  const userId = localStorage.getItem(PHONE_USERID_KEY);
+  const secret = localStorage.getItem(PHONE_SECRET_KEY);
+  if (narrowScreen || phoneEl || !user || !userId || !secret) return;
+  // Plain http has no navigator.mediaDevices, and the phone crashes while loading without it.
+  if (!window.isSecureContext) { setPhoneStatus('Puhelin vaatii HTTPS-osoitteen'); return; }
+  const authHeader = { value: 'Basic ' + btoa(user + ':' + secret), expiresIn: PHONE_AUTH_EXPIRES_S };
+  setPhoneStatus('Yhdistetään…');
+  loadPhoneContacts();
+
+  phoneEl = document.createElement('webrtc-client-ui');
+  phoneEl.setAttribute('disable-pnps-query', '');
+  phoneEl.style.display = 'none'; // headless; inline style beats the component's own :host display
+  phoneEl.addEventListener('init', () => {
+    phoneEl.setPhoneLanguage('fi');
+    Promise.resolve()
+      .then(() => phoneEl.login({ type: 'AuthHeader', username: user, userId, authHeader, showPermissionPage: false }))
+      .catch(() => setPhoneStatus('Kirjautuminen epäonnistui — kirjaudu uudelleen asetuksista'));
+  });
+  phoneEl.addEventListener('auth-token-expired', () => phoneEl.setAuthHeader(authHeader));
+  phoneEl.addEventListener('logged-in', () => {
+    setPhoneStatus('Yhdistetty');
+    phoneBtn.hidden = false;
+  });
+  phoneEl.addEventListener('phone-error', (e) => {
+    const name = e.detail && (e.detail.name || e.detail);
+    if (name === 'connection-lost') setPhoneStatus('Yhteys katkesi, yhdistetään…');
+    else if (name === 'connection-restored' || name === 'user-click-resolved') setPhoneStatus('Yhdistetty');
+    else if (name === 'connection-failed') reloadPhoneSoon();
+    else if (name === 'user-click-needed') setPhoneStatus('Soittoääni estetty — napauta näyttöä');
+  });
+  phoneEl.addEventListener('restart-phone', reloadPhoneSoon);
+
+  phoneEl.addEventListener('call-incoming', (e) => showCall(e.detail, 'Saapuva puhelu'));
+  phoneEl.addEventListener('call-started', (e) => showCall(e.detail, 'Soitetaan…'));
+  phoneEl.addEventListener('call-in-progress', () => { callStatusEl.textContent = 'Hälyttää…'; });
+  phoneEl.addEventListener('call-answered', callConnected);
+  phoneEl.addEventListener('call-confirmed', callConnected);
+  phoneEl.addEventListener('call-ended', (e) => {
+    if (e.detail && e.detail.callId === currentCallId) hideCall();
+  });
+  document.body.appendChild(phoneEl);
+
+  const script = document.createElement('script');
+  script.src = ENREACH_PHONE_JS;
+  script.onerror = () => setPhoneStatus('Puhelimen lataus epäonnistui');
+  document.head.appendChild(script);
+}
+
+function showCall(d, status) {
+  currentCallId = d.callId;
+  const incoming = d.callDirection === 'incoming';
+  const name = contactName(d.phoneNumber);
+  callNameEl.textContent = name || d.phoneNumber || 'Tuntematon numero';
+  callNumberEl.textContent = name ? d.phoneNumber : '';
+  callStatusEl.textContent = status;
+  callAnswerBtn.hidden = callRejectBtn.hidden = !incoming;
+  callEndBtn.hidden = incoming;
+  if (incoming && !name) lookupCaller(d.callId, d.internationalPhoneNumber, d.phoneNumber);
+  closePhone();
+  callOverlay.hidden = false;
+  if (incoming && window.fully) fully.turnScreenOn(); // Fully Kiosk's JavaScript interface, when enabled
+}
+
+// Finnish public number directory via Enreach. Needs PublicDirectoryLookup_Enabled on the
+// user; otherwise the API answers 403 and the caller stays a bare number.
+function lookupCaller(callId, e164, shown) {
+  if (!/^\+358\d+$/.test(e164 || '')) return;
+  Promise.resolve()
+    .then(() => phoneEl.makeAPICall('POST', 'users/[me]/features/public-directory/resolve/', { phoneNumber: e164 }))
+    .then((r) => {
+      // The API answers in PascalCase, unlike the camelCase example in its docs.
+      if (callId !== currentCallId || !r || r.Result !== 'Found' || !(r.Name || r.Company)) return;
+      callNameEl.textContent = r.Name || r.Company;
+      callNumberEl.textContent = [r.Name && r.Company, shown].filter(Boolean).join(' · ');
+    })
+    .catch(() => {});
+}
+
+function callConnected() {
+  callStatusEl.textContent = 'Puhelu käynnissä';
+  callAnswerBtn.hidden = callRejectBtn.hidden = true;
+  callEndBtn.hidden = false;
+}
+
+function hideCall() {
+  currentCallId = null;
+  callOverlay.hidden = true;
+}
+
+function dial(number) {
+  if (!number || !phoneEl) return;
+  Promise.resolve()
+    .then(() => phoneEl.call(number))
+    .catch(() => setPhoneStatus('Soitto epäonnistui'));
+}
+
+function renderDialed() {
+  phoneNumberEl.textContent = phoneDialed;
+}
+
+for (const key of ['1', '2', '3', '4', '5', '6', '7', '8', '9', '*', '0', '#']) {
+  const btn = document.createElement('button');
+  btn.className = 'phone-key';
+  btn.textContent = key;
+  btn.addEventListener('click', () => { phoneDialed += key; renderDialed(); });
+  phoneKeysEl.appendChild(btn);
+}
+document.getElementById('phone-back').addEventListener('click', () => {
+  phoneDialed = phoneDialed.slice(0, -1);
+  renderDialed();
+});
+document.getElementById('phone-call').addEventListener('click', () => dial(phoneDialed));
+
+function closePhone() {
+  phoneOverlay.hidden = true;
+  phoneDialed = '';
+  renderDialed();
+}
+
+phoneBtn.addEventListener('click', () => { phoneOverlay.hidden = false; });
+document.getElementById('phone-close').addEventListener('click', closePhone);
+callAnswerBtn.addEventListener('click', () => phoneEl.answerCall(currentCallId));
+callRejectBtn.addEventListener('click', () => { phoneEl.rejectCall(currentCallId); hideCall(); });
+callEndBtn.addEventListener('click', () => { phoneEl.endCall(currentCallId); hideCall(); });
+
+// Settings: phone credentials. Changing them needs a reload, since the phone
+// can't log in twice on one page.
+function closeSettings() {
+  settingsOverlay.hidden = true;
+}
+
+settingsBtn.addEventListener('click', () => {
+  settingsUser.value = localStorage.getItem(PHONE_USER_KEY) || '';
+  settingsPass.value = '';
+  if (!phoneEl) settingsStatusEl.textContent = '';
+  settingsOverlay.hidden = false;
+});
+document.getElementById('settings-cancel').addEventListener('click', closeSettings);
+document.getElementById('settings-clear').addEventListener('click', () => {
+  localStorage.removeItem(PHONE_USER_KEY);
+  localStorage.removeItem(PHONE_USERID_KEY);
+  localStorage.removeItem(PHONE_SECRET_KEY);
+  location.reload();
+});
+document.getElementById('settings-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const user = settingsUser.value.trim();
+  const pass = settingsPass.value;
+  if (!user || !pass) return;
+  settingsStatusEl.textContent = 'Kirjaudutaan…';
+  try {
+    const { userId, secretKey } = await fetchPhoneKey(user, pass);
+    localStorage.setItem(PHONE_USER_KEY, user);
+    localStorage.setItem(PHONE_USERID_KEY, userId);
+    localStorage.setItem(PHONE_SECRET_KEY, secretKey);
+  } catch (err) {
+    settingsStatusEl.textContent = err instanceof TypeError ? 'Ei yhteyttä Enreachiin' : err.message;
+    return;
+  }
+  if (phoneEl) { location.reload(); return; }
+  closeSettings();
+  startPhone();
+});
+
+document.addEventListener('keydown', (e) => {
+  if (e.key !== 'Escape') return;
+  if (!phoneOverlay.hidden) closePhone();
+  if (!settingsOverlay.hidden) closeSettings();
+});
+
+settingsBtn.hidden = narrowScreen;
+startPhone();
+
 // Daily reload at 04:00 — guards against multi-week JS-state drift.
 (function scheduleDailyReload() {
   const now = new Date();

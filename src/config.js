@@ -32,6 +32,15 @@ function parseSpeakers() {
   return list;
 }
 
+// PHONE_CONTACTS=Äiti=+358401234567,Isä=+358501234567 — speed dials for the phone overlay.
+function parseContacts() {
+  return (process.env.PHONE_CONTACTS ?? '')
+    .split(',')
+    .map((s) => s.split('='))
+    .filter(([name, number]) => name && name.trim() && number && number.trim())
+    .map(([name, number]) => ({ name: name.trim(), number: number.trim() }));
+}
+
 function parseSensors() {
   const out = [];
   for (let i = 1; i <= 20; i++) {
@@ -110,6 +119,7 @@ export const config = {
     camera: process.env.DOORBELL_CAMERA || null,
   },
   controls: parseControls(),
+  phoneContacts: parseContacts(),
   music: {
     player: process.env.MUSIC_PLAYER || null,
     speakers: parseSpeakers(),

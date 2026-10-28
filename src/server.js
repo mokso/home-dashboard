@@ -11,6 +11,7 @@ import { controlRoutes } from './routes/controls.js';
 import { musicRoutes } from './routes/music.js';
 import { voiceRoutes } from './routes/voice.js';
 import { radarRoutes } from './routes/radar.js';
+import { phoneRoutes } from './routes/phone.js';
 import { warmup, setLogger } from './sources/immich.js';
 import { health } from './lib/health.js';
 
@@ -46,6 +47,7 @@ await fastify.register(controlRoutes);
 await fastify.register(musicRoutes);
 await fastify.register(voiceRoutes);
 await fastify.register(radarRoutes);
+await fastify.register(phoneRoutes);
 
 fastify.get('/api/health', async () => ({
   ok: true,
