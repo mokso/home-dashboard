@@ -56,12 +56,14 @@ export async function cameraRoutes(fastify) {
     );
     if (!res.ok) throw new Error(`HA doorbell ${doorbell} failed: ${res.status}`);
     const s = await res.json();
-    return { state: s.state, lastChanged: s.last_changed, camera: cameras.indexOf(doorbellCamera) };
+    return { state: s.state, lastChanged: s.last_changed, camera: cameras.indexOf(doorbellCamera), fetchedAt: Date.now() };
   }, 1000);
 
   fastify.get('/api/doorbell', async (req, reply) => {
     try {
-      return await doorbellState();
+      const { fetchedAt, ...d } = await doorbellState();
+      // Stale = HA unreachable (e.g. restarting); the client must not compare across the gap.
+      return { ...d, stale: Date.now() - fetchedAt > 5000 };
     } catch (err) {
       fastify.log.error({ err }, 'doorbell state failed');
       reply.code(503);

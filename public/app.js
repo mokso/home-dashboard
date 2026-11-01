@@ -738,6 +738,8 @@ async function pollDoorbell() {
     if (res.status === 404) return; // not configured: stop polling
     if (res.ok) {
       const d = await res.json();
+      // HA restart resets last_changed, which looked like a press: re-baseline after an outage.
+      if (d.stale) { doorbellSeen = null; setTimeout(pollDoorbell, DOORBELL_POLL_MS); return; }
       // A short press can start and end between polls, so off -> off with a new timestamp counts too.
       const pressed = doorbellSeen && d.lastChanged !== doorbellSeen.lastChanged
         && (d.state === 'on' || (d.state === 'off' && doorbellSeen.state === 'off'));
