@@ -1930,6 +1930,10 @@ function startPhone() {
   });
   document.body.appendChild(phoneEl);
 
+  // The Enreach script adds a "leave this page?" beforeunload prompt that blocks kiosk
+  // reloads. Registered first, this listener runs first and stops it (its pagehide cleanup still runs).
+  window.addEventListener('beforeunload', (e) => e.stopImmediatePropagation(), true);
+
   const script = document.createElement('script');
   script.src = ENREACH_PHONE_JS;
   script.onerror = () => setPhoneStatus('Puhelimen lataus epäonnistui');
