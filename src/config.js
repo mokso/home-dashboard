@@ -120,6 +120,12 @@ export const config = {
   },
   controls: parseControls(),
   phoneContacts: parseContacts(),
+  phoneAutoAnswer: {
+    entity: process.env.PHONE_AUTOANSWER_ENTITY || null,
+    message: process.env.PHONE_AUTOANSWER_MESSAGE ||
+      'Your call has been answered automatically. You are now on speaker, and everyone in the room can hear you. Try not to say anything you will regret.',
+    numbers: (process.env.PHONE_AUTOANSWER_NUMBERS || '').split(',').map((s) => s.trim()).filter(Boolean),
+  },
   music: {
     player: process.env.MUSIC_PLAYER || null,
     speakers: parseSpeakers(),

@@ -1828,6 +1828,10 @@ let phoneContacts = [];
 let phoneDialed = '';
 let currentCallId = null; // shortcut: one call at a time; a second incoming call replaces the view
 let phoneReloadTimer = null;
+let autoAnswerTimer = null;
+const AUTO_ANSWER_MS = 10 * 1000;
+let greetingNext = null; // Promise<ArrayBuffer|null>, played into the call once it connects
+let lastPeerConnection = null; // shortcut: one call at a time, so the newest connection is the call's
 
 function setPhoneStatus(text) {
   phoneStatusEl.textContent = text;
@@ -1922,7 +1926,10 @@ function startPhone() {
   });
   phoneEl.addEventListener('restart-phone', reloadPhoneSoon);
 
-  phoneEl.addEventListener('call-incoming', (e) => showCall(e.detail, 'Saapuva puhelu'));
+  phoneEl.addEventListener('call-incoming', (e) => {
+    showCall(e.detail, 'Saapuva puhelu');
+    maybeAutoAnswer(e.detail);
+  });
   phoneEl.addEventListener('call-started', (e) => showCall(e.detail, 'Soitetaan…'));
   phoneEl.addEventListener('call-in-progress', () => { callStatusEl.textContent = 'Hälyttää…'; });
   phoneEl.addEventListener('call-answered', callConnected);
@@ -1931,6 +1938,12 @@ function startPhone() {
     if (e.detail && e.detail.callId === currentCallId) hideCall();
   });
   document.body.appendChild(phoneEl);
+
+  // The phone has no API for its audio, so remember its connections to play the greeting into.
+  const PeerConnection = window.RTCPeerConnection;
+  window.RTCPeerConnection = class extends PeerConnection {
+    constructor(...args) { super(...args); lastPeerConnection = this; }
+  };
 
   // The Enreach script adds a "leave this page?" beforeunload prompt that blocks kiosk
   // reloads. Registered first, this listener runs first and stops it (its pagehide cleanup still runs).
@@ -1972,13 +1985,80 @@ function lookupCaller(callId, e164, shown) {
     .catch(() => {});
 }
 
+// Swaps the call's outgoing audio from the mic to the greeting (or two beeps) and back,
+// and plays it on the tablet too. The mic is off meanwhile, so the speaker doesn't echo back.
+async function playGreeting(greeting) {
+  const sender = lastPeerConnection && lastPeerConnection.getSenders().find((s) => s.track && s.track.kind === 'audio');
+  if (!sender) return;
+  const mic = sender.track;
+  const ctx = new AudioContext();
+  const dest = ctx.createMediaStreamDestination();
+  let src;
+  try {
+    await ctx.resume();
+    const data = await greeting;
+    if (!data) throw new Error('no greeting audio');
+    src = ctx.createBufferSource();
+    src.buffer = await ctx.decodeAudioData(data);
+    src.connect(dest);
+    src.connect(ctx.destination);
+  } catch (err) {
+    src = ctx.createOscillator();
+    src.frequency.value = 880;
+    const gain = ctx.createGain();
+    gain.gain.setValueAtTime(0, ctx.currentTime);
+    for (const t of [0.1, 0.6]) {
+      gain.gain.setValueAtTime(0.3, ctx.currentTime + t);
+      gain.gain.setValueAtTime(0, ctx.currentTime + t + 0.25);
+    }
+    src.connect(gain).connect(dest);
+    gain.connect(ctx.destination);
+  }
+  src.onended = () => {
+    sender.replaceTrack(mic).catch(() => {}); // fails harmlessly if the call already ended
+    ctx.close();
+  };
+  try {
+    await sender.replaceTrack(dest.stream.getAudioTracks()[0]);
+    src.start();
+    if (src.frequency) src.stop(ctx.currentTime + 1);
+  } catch (err) {
+    ctx.close();
+  }
+}
+
+// The server decides (known number + HA switch on); a failed check just leaves the call ringing.
+async function maybeAutoAnswer(d) {
+  try {
+    const res = await apiFetch('/api/phone/autoanswer?number=' + encodeURIComponent(d.phoneNumber || ''));
+    if (!res.ok || !(await res.json()).answer || d.callId !== currentCallId) return;
+    callStatusEl.textContent = 'Vastataan automaattisesti…';
+    const greeting = apiFetch('/api/phone/autoanswer/greeting')
+      .then((r) => (r.ok ? r.arrayBuffer() : null))
+      .catch(() => null);
+    clearTimeout(autoAnswerTimer);
+    autoAnswerTimer = setTimeout(() => {
+      if (d.callId !== currentCallId || callAnswerBtn.hidden) return;
+      greetingNext = greeting;
+      phoneEl.answerCall(d.callId);
+    }, AUTO_ANSWER_MS);
+  } catch (err) {
+    // keep ringing
+  }
+}
+
 function callConnected() {
+  clearTimeout(autoAnswerTimer);
+  // answered and confirmed both land here; play once, a moment after media starts flowing
+  if (greetingNext) { setTimeout(playGreeting, 1000, greetingNext); greetingNext = null; }
   callStatusEl.textContent = 'Puhelu käynnissä';
   callAnswerBtn.hidden = callRejectBtn.hidden = true;
   callEndBtn.hidden = false;
 }
 
 function hideCall() {
+  clearTimeout(autoAnswerTimer);
+  greetingNext = null;
   currentCallId = null;
   callOverlay.hidden = true;
 }

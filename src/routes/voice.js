@@ -73,6 +73,13 @@ async function answer(text) {
 // back to the engine's default voice.
 const ttsLanguages = [...new Set([language, language.replace('-', '_'), null])];
 
+// Also used by the phone's auto-answer greeting.
+export async function textToSpeechAudio(message) {
+  const res = await fetch(`${baseUrl}${await textToSpeechPath(message)}`, { headers });
+  if (!res.ok) throw new Error(`HA TTS audio failed: ${res.status}`);
+  return { type: res.headers.get('content-type') || 'audio/mpeg', buf: Buffer.from(await res.arrayBuffer()) };
+}
+
 async function textToSpeechPath(message) {
   let res;
   for (const lang of ttsLanguages) {
