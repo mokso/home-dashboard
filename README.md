@@ -17,6 +17,7 @@ Built as a DAKboard replacement running on a Samsung Galaxy Tab S6 Lite in Fully
 - **Controls** — button opens a tile overlay of Home Assistant toggles (switches, lights, input booleans) and climate tiles (target temperature −/+ and heat/cool/auto/off modes)
 - **Music** — a music button (animated while playing) opens a fullscreen music view: cover art, progress bar with seek, play/pause/skip, shuffle/repeat, volume, next track and speaker picker, plus the Music Assistant library (recently played, playlists, albums, artists) to start something new
 - **Phone** — Enreach Voice web phone running headless in the page: incoming calls open a fullscreen answer/reject view, the phone button opens speed dials and a keypad. Log in from the settings (gear) button
+- **Homelab alerts** — red banner at the top while any Uptime Kuma monitor is down; hidden otherwise
 - **Voice assistant** — tap-to-talk mic button that runs speech through Home Assistant Assist (speech-to-text → conversation agent → spoken reply)
 
 ## Stack
@@ -96,6 +97,8 @@ Copy `.env.example` to `.env` and set the values below.
 | `CALENDAR_DAYS_AHEAD` | no | Days of events to show (default 5) |
 | `ELEC_GREEN_BELOW` | no | Price threshold for green (default 10 c/kWh) |
 | `ELEC_RED_ABOVE` | no | Price threshold for red (default 20 c/kWh) |
+| `UPTIME_KUMA_URL` | no | Uptime Kuma base URL (e.g. `http://192.168.1.10:3001`). With `UPTIME_KUMA_API_KEY`, a red banner at the top lists monitors that are down (from Kuma's `/metrics`, cached 30 s, refreshed with the 60 s state poll) |
+| `UPTIME_KUMA_API_KEY` | no | Kuma API key (Settings → API Keys), used for `/metrics` Basic auth |
 | `CAMERA_ENTITIES` | no | Comma-separated HA camera entity IDs; camera button hidden if unset |
 | `DOORBELL_ENTITY` | no | HA `binary_sensor` of the doorbell button. When it turns on, every open dashboard (also the UVP phone) opens `DOORBELL_CAMERA` fullscreen for 20 s; with Fully Kiosk's *JavaScript Interface* enabled it also wakes the screen. Pages poll `/api/doorbell` every 2 s |
 | `DOORBELL_CAMERA` | no | The doorbell camera, one of `CAMERA_ENTITIES` |

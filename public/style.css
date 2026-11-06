@@ -1862,10 +1862,19 @@ body.electricity-compact .panel-sensors:not(.expanded) {
     -webkit-backdrop-filter: none;
   }
 
-  .panel-clock,
+  /* Clock and weather stacked full width; weather left-aligned with the hourly row spread across. */
   .panel-weather {
-    flex: 1 1 0;
     min-width: 0;
+    text-align: left;
+  }
+
+  .weather-current,
+  .weather-day {
+    justify-content: flex-start;
+  }
+
+  .weather-hourly {
+    justify-content: space-between;
   }
 
   .clock-time {
@@ -1987,5 +1996,38 @@ body.electricity-compact .panel-sensors:not(.expanded) {
     padding: 10px;
     justify-content: center;
     background: #000;
+  }
+}
+
+/* Uptime Kuma alert banner (see renderUptime) */
+.uptime-alert {
+  position: fixed;
+  top: 32px;
+  left: 50%;
+  transform: translateX(-50%);
+  max-width: 50%;
+  padding: 12px 24px;
+  border-radius: 14px;
+  background: rgba(200, 30, 30, 0.85);
+  color: #fff;
+  font-size: 22px;
+  font-weight: 600;
+  text-align: center;
+  pointer-events: none;
+  z-index: 5; /* below the expanded sensor view (10) and overlays, so their close buttons stay reachable */
+}
+
+.uptime-alert[hidden] {
+  display: none;
+}
+
+@media (max-width: 700px) {
+  .uptime-alert {
+    position: static;
+    transform: none;
+    max-width: none;
+    flex: 1 1 100%;
+    order: -1;
+    font-size: 18px;
   }
 }

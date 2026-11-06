@@ -500,6 +500,14 @@ function renderElectricity(e) {
 
 // State poller -------------------------------------------------------
 
+// Uptime Kuma: banner only while some monitor is down. null (not configured / fetch failed) hides it.
+function renderUptime(u) {
+  const el = document.getElementById('uptime-alert');
+  const down = (u && u.down) || [];
+  el.hidden = down.length === 0;
+  el.textContent = down.length ? '⚠ Alhaalla: ' + down.join(', ') : '';
+}
+
 async function pollState() {
   try {
     const r = await apiFetch('/api/state', { cache: 'no-store' });
@@ -511,6 +519,7 @@ async function pollState() {
     if (data.calendar) renderCalendar(data.calendar, data.calendarDays);
     if (data.sensors !== undefined) renderSensors(data.sensors);
     if (data.electricity) renderElectricity(data.electricity);
+    renderUptime(data.uptime);
   } catch (err) {
     // last-good values stay on screen
   }

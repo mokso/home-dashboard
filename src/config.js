@@ -111,6 +111,11 @@ export const config = {
     // CSS filter for the base map; the default turns light OSM tiles dark.
     basemapFilter: process.env.RADAR_BASEMAP_FILTER ?? 'invert(1) hue-rotate(180deg) grayscale(0.7) brightness(0.75) contrast(1.1)',
   },
+  // Optional: shows a banner when any Uptime Kuma monitor is down.
+  uptimeKuma: {
+    url: (process.env.UPTIME_KUMA_URL || '').replace(/\/+$/, '') || null,
+    apiKey: process.env.UPTIME_KUMA_API_KEY || null,
+  },
   sensors: parseSensors(),
   cameras: csv('CAMERA_ENTITIES'),
   // When this binary_sensor turns on, the page opens DOORBELL_CAMERA (one of CAMERA_ENTITIES) fullscreen.
